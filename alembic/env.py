@@ -11,7 +11,7 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-database_url = os.environ["EXTERNAL_DATABASE_URL"]
+database_url = os.environ.get("EXTERNAL_DATABASE_URL") or os.environ["DATABASE_URL"]
 # asyncpg URL must use postgresql:// not postgresql+asyncpg:// for raw SQL migrations
 config.set_main_option("sqlalchemy.url", database_url)
 
