@@ -420,7 +420,7 @@ The conflict detection prompts contain **generic** conflict detection patterns t
 | QueryRouter | Claude | claude-sonnet-4-5-20250929 | Gemini | gemini-2.5-flash-lite | Fast classification (<2s) |
 | TruthSynthesizer | Claude | claude-opus-4-5-20250514 | Azure OpenAI | gpt-5-mini | Comprehensive synthesis |
 | ReusabilityAnalyzerAgent | Claude | claude-sonnet-4-5-20250929 | Gemini | gemini-2.5-flash-lite | Phase 2 — complexity TBD |
-| Embeddings | Azure OpenAI | text-embedding-3-large | Gemini | embedding-001 | Azure creds already in .env |
+| Embeddings | Gemini | gemini-embedding-001 | Azure OpenAI | text-embedding-3-large | Gemini gemini-embedding-001 used with task_type RETRIEVAL_DOCUMENT (Stage 1 checkpoint + Stage 4 indexing) and RETRIEVAL_QUERY (query-time search) |
 
 ### Temperature Configuration
 

@@ -28,7 +28,7 @@ def upgrade() -> None:
             section_text TEXT NOT NULL,
             effective_date DATE,
             embedding vector(768) NOT NULL,
-            embedding_model VARCHAR(100) NOT NULL DEFAULT 'text-embedding-004',
+            embedding_model VARCHAR(100) NOT NULL DEFAULT 'gemini-embedding-001',
             created_at TIMESTAMP DEFAULT NOW(),
             updated_at TIMESTAMP DEFAULT NOW()
         )

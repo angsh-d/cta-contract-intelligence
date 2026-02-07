@@ -110,9 +110,10 @@ PDF File
    │
    ├─► Section Deduplication (when chunked)
    │
-   └─► pgvector Upsert (section_embeddings table on NeonDB)
-         └─ Embeds section text via Gemini text-embedding-004 (768-dim, RETRIEVAL_DOCUMENT)
-         └─ Metadata: document_id, section_number, section_title, effective_date
+   └─► pgvector Upsert (section_embeddings table on NeonDB, is_resolved=FALSE)
+         └─ Embeds section text via Gemini gemini-embedding-001 (768-dim, RETRIEVAL_DOCUMENT)
+         └─ Keyed by: (contract_stack_id, document_id, section_number)
+         └─ Purpose: Checkpoint fallback — per-document raw sections for pipeline resume
 ```
 
 ### Input / Output
@@ -136,7 +137,7 @@ PDF File
 
 ### Database Writes
 - Updates `documents.processed = TRUE` and `documents.metadata` in PostgreSQL
-- Upserts embeddings to pgvector (section_embeddings table on NeonDB)
+- Upserts checkpoint embeddings to pgvector (section_embeddings table, is_resolved=FALSE)
 
 ---
 
@@ -341,6 +342,20 @@ current_clauses = [
 ]
 ```
 
+### Resolved-Clause Embedding (Query Search Index)
+
+After saving resolved clauses to PostgreSQL, the orchestrator embeds them into pgvector with `is_resolved=TRUE`. These are the **only** embeddings searched during query-time semantic search.
+
+```python
+# Orchestrator calls after _save_resolved_clauses():
+await self._embed_resolved_clauses(contract_stack_id, current_clauses)
+# → VectorStore.upsert_resolved_clauses() with enriched text:
+#   "Section 7.2 — Payment Terms\nCategory: financial\n{current_text}"
+#   Keyed by (contract_stack_id, section_number), is_resolved=TRUE
+```
+
+On checkpoint resume, the orchestrator checks `has_resolved_embeddings()` and re-embeds if missing (e.g., prior crash after saving clauses but before embedding).
+
 ---
 
 ## Stage 5: Dependency Mapping (80-90%)
@@ -513,6 +528,7 @@ User Query
 ┌────────────────────────────────┐
 │ Step 2: Multi-Source Retrieval   │
 │   - pgvector semantic search   │
+│     (is_resolved=TRUE only)    │
 │   - PostgreSQL batch lookup    │
 │   - Entity-based section match │
 └────────────────────────────────┘
@@ -573,10 +589,11 @@ User Query
 Three retrieval sources merged and deduplicated:
 
 ```
-1. pgvector Semantic Search (section_embeddings table)
-   └─ Embeds query via Gemini text-embedding-004 (RETRIEVAL_QUERY)
+1. pgvector Semantic Search (section_embeddings table, is_resolved=TRUE)
+   └─ Embeds query via Gemini gemini-embedding-001 (RETRIEVAL_QUERY)
+   └─ WHERE contract_stack_id = $2 AND is_resolved = TRUE
    └─ ORDER BY embedding <=> query_vector, LIMIT 10
-   └─ Filtered by contract_stack_id, returns section_numbers
+   └─ Returns section_numbers for resolved current-truth clauses only
 
 2. Entity-Based Matching
    └─ Adds extracted_entities as section_numbers
@@ -697,7 +714,7 @@ A shared `asyncio.Semaphore(5)` limits concurrent LLM calls across all agents to
 | Store | Purpose |
 |-------|---------|
 | **PostgreSQL (NeonDB)** | Structured data: contract_stacks, documents, clauses, amendments, clause_dependencies, document_supersessions, conflicts, pipeline_traces |
-| **pgvector (NeonDB)** | Vector embeddings for semantic search (Gemini `text-embedding-004`, 768-dim) in `section_embeddings` table |
+| **pgvector (NeonDB)** | Two-tier vector embeddings in `section_embeddings` table (Gemini `gemini-embedding-001`, 768-dim): `is_resolved=FALSE` for Stage 1 checkpoint fallback, `is_resolved=TRUE` for Stage 4 resolved-clause query search |
 | **InMemoryCache** | Query result caching (1-hour TTL), replaces Redis |
 
 ### Key PostgreSQL Tables
@@ -705,9 +722,11 @@ A shared `asyncio.Semaphore(5)` limits concurrent LLM calls across all agents to
 | Table | Written By Stage | Purpose |
 |-------|-----------------|---------|
 | `documents` | Stage 1 | Document metadata + processed flag |
+| `section_embeddings` (is_resolved=FALSE) | Stage 1 | Per-document checkpoint embeddings, keyed by (stack, doc, section) |
 | `amendments` | Stage 2 | Amendment tracking results + modifications JSON |
 | `document_supersessions` | Stage 3 | Version tree (which doc supersedes which) |
 | `clauses` | Stage 4 | Current clause text + source chain provenance |
+| `section_embeddings` (is_resolved=TRUE) | Stage 4 | Resolved-clause embeddings for query-time search, keyed by (stack, section) |
 | `clause_dependencies` | Stage 5 | Dependency graph edges |
 | `conflicts` | Stage 6 | Detected conflicts with evidence |
 | `pipeline_traces` | Completion | LLM call metrics for cost tracking |

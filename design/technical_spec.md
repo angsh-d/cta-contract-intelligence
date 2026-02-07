@@ -51,7 +51,11 @@
 ┌─────────────────────────────────────────────────────────────┐
 │  PostgreSQL + pgvector (NeonDB)                             │
 │  - Structured data + clause dependency graph (recursive CTEs)│
-│  - Vector embeddings (section_embeddings table, HNSW index) │
+│  - Two-tier vector embeddings (section_embeddings table):   │
+│    * is_resolved=FALSE: Stage 1 per-document checkpoint     │
+│      fallback (keyed by stack, doc, section)                │
+│    * is_resolved=TRUE: Stage 4 resolved-clause query search │
+│      (keyed by stack, section)                              │
 │  - Semantic search via cosine distance (<=> operator)       │
 └─────────────────────────────────────────────────────────────┘
                             ↓
@@ -73,12 +77,12 @@
 
 ### Databases
 - **Relational:** PostgreSQL 15+ via NeonDB (primary data store + clause dependency graph via recursive CTEs)
-- **Vector Store:** pgvector on NeonDB (section_embeddings table, HNSW cosine index)
+- **Vector Store:** pgvector on NeonDB (section_embeddings table, HNSW cosine index). Two-tier architecture: `is_resolved=FALSE` rows serve as Stage 1 per-document checkpoint fallback (keyed by stack, doc, section); `is_resolved=TRUE` rows serve as Stage 4 resolved-clause query search (keyed by stack, section). Query-time searches filter on `is_resolved = TRUE`; checkpoint lookups filter on `is_resolved = FALSE`
 - **Cache:** Redis (session state, query cache)
 
 ### AI/ML
 - **LLM API:** Anthropic Claude API (claude-opus-4.5, claude-sonnet-4.5)
-- **Embeddings:** Gemini text-embedding-004 (768-dim, via GEMINI_API_KEY in .env)
+- **Embeddings:** Gemini gemini-embedding-001 (768-dim, via GEMINI_API_KEY in .env). Task types: `RETRIEVAL_DOCUMENT` for indexing, `RETRIEVAL_QUERY` for search
 - **Document Processing:** PyMuPDF, pdfplumber, python-docx
 - **NLP:** spaCy (optional for entity extraction)
 
@@ -260,6 +264,41 @@ CREATE TABLE document_supersessions (
 );
 
 CREATE INDEX idx_doc_supersessions_stack ON document_supersessions(contract_stack_id);
+```
+
+### section_embeddings
+```sql
+CREATE TABLE section_embeddings (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    contract_stack_id UUID NOT NULL REFERENCES contract_stacks(id),
+    document_id UUID REFERENCES documents(id),          -- populated for checkpoint rows; NULL for resolved rows
+    section_number VARCHAR(50) NOT NULL,
+    section_title VARCHAR(255),
+    content_text TEXT NOT NULL,                          -- the text that was embedded
+    embedding vector(768) NOT NULL,                     -- gemini-embedding-001 output
+    is_resolved BOOLEAN NOT NULL DEFAULT FALSE,         -- FALSE = Stage 1 checkpoint, TRUE = Stage 4 resolved
+    metadata JSONB,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Two-tier partial unique indexes:
+-- Stage 1 checkpoint fallback: one embedding per (stack, document, section)
+CREATE UNIQUE INDEX uq_section_embeddings_doc_section
+    ON section_embeddings (contract_stack_id, document_id, section_number)
+    WHERE is_resolved = FALSE;
+
+-- Stage 4 resolved-clause query search: one embedding per (stack, section)
+CREATE UNIQUE INDEX uq_section_embeddings_resolved
+    ON section_embeddings (contract_stack_id, section_number)
+    WHERE is_resolved = TRUE;
+
+-- HNSW index for fast cosine similarity search on resolved embeddings
+CREATE INDEX idx_section_embeddings_hnsw
+    ON section_embeddings USING hnsw (embedding vector_cosine_ops);
+
+CREATE INDEX idx_section_embeddings_stack ON section_embeddings(contract_stack_id);
+CREATE INDEX idx_section_embeddings_resolved ON section_embeddings(is_resolved);
 ```
 
 ### Multi-Hop Traversal (Recursive CTE)
@@ -1597,7 +1636,7 @@ services:
       - redis
     volumes:
       - ./uploads:/app/uploads
-      # Vector embeddings stored in NeonDB via pgvector — no local volume needed
+      # Vector embeddings stored in NeonDB via pgvector (two-tier: is_resolved=FALSE for Stage 1 checkpoint fallback, is_resolved=TRUE for Stage 4 query search) — no local volume needed
 
   frontend:
     build: ./frontend
@@ -1646,8 +1685,8 @@ AZURE_OPENAI_API_VERSION=2024-10-01-preview
 # Gemini
 GEMINI_API_KEY=...
 
-# Vector embeddings use pgvector on NeonDB (no separate vector DB needed)
-# Embedding model: Gemini text-embedding-004 (uses GEMINI_API_KEY above)
+# Vector embeddings use pgvector on NeonDB (two-tier: is_resolved=FALSE for Stage 1 per-document checkpoint fallback, is_resolved=TRUE for Stage 4 resolved-clause query search)
+# Embedding model: Gemini gemini-embedding-001 (task_type=RETRIEVAL_DOCUMENT for indexing, RETRIEVAL_QUERY for search; uses GEMINI_API_KEY above)
 
 # Application
 APP_ENV=development

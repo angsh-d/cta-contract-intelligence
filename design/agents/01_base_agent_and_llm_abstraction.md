@@ -285,7 +285,7 @@ class LLMProviderFactory:
         "extraction":       ("claude",       "gemini"),      # Sonnet for parsing
         "complex_reasoning":("claude",       "azure_openai"),# Opus for reasoning
         "classification":   ("claude",       "gemini"),      # Sonnet for routing
-        "embedding":        ("azure_openai", "gemini"),      # text-embedding-3-large
+        "embedding":        ("gemini",       "azure_openai"),  # gemini-embedding-001 (is_resolved=TRUE filtering for query-time semantic search via pgvector)
         "synthesis":        ("claude",       "azure_openai"),# Opus for truth synthesis
     }
 

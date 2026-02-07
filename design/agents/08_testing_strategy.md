@@ -942,7 +942,10 @@ async def postgres_pool():
     import os
     dsn = os.getenv("EXTERNAL_DATABASE_URL")  # NeonDB connection string
     pool = await asyncpg.create_pool(dsn=dsn)
-    # Run schema migrations (includes pgvector extension + section_embeddings table)
+    # Run schema migrations (includes pgvector extension + section_embeddings table).
+    # The section_embeddings schema must include the `is_resolved` column to support
+    # the two-tier embedding architecture: is_resolved=FALSE for Stage 1 checkpoint
+    # embeddings, is_resolved=TRUE for Stage 4 query-ready embeddings.
     async with pool.acquire() as conn:
         schema = Path("backend/db/schema.sql").read_text()
         await conn.execute(schema)
@@ -954,7 +957,14 @@ async def postgres_pool():
 
 @pytest.fixture(scope="session")
 def vector_store(postgres_pool):
-    """Create a VectorStore backed by pgvector on the test PostgreSQL pool."""
+    """Create a VectorStore backed by pgvector on the test PostgreSQL pool.
+
+    The VectorStore must support the two-tier embedding architecture:
+    - is_resolved=FALSE: Stage 1 checkpoint embeddings (stored during ingestion
+      before override resolution, used as intermediate snapshots)
+    - is_resolved=TRUE: Stage 4 query-ready embeddings (stored after override
+      resolution, filtered on for query-time semantic search)
+    """
     return VectorStore(postgres_pool)
 
 @pytest.fixture

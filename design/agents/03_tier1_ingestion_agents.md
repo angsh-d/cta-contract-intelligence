@@ -75,12 +75,18 @@ AgentConfig(
 │   - Effective date, parties, study protocol              │
 │   - Extracted as part of the LLM structuring call        │
 ├─────────────────────────────────────────────────────────┤
-│ Step 6: pgvector Embedding Upsert (NeonDB)                 │
+│ Step 6: pgvector Checkpoint Embedding Upsert (NeonDB)      │
 │   - Embed each section's text via Gemini                 │
-│     (text-embedding-004, 768-dim, RETRIEVAL_DOCUMENT)   │
-│   - Upsert to section_embeddings table with metadata:    │
+│     (gemini-embedding-001, 768-dim, RETRIEVAL_DOCUMENT)  │
+│   - Upsert to section_embeddings table keyed by          │
+│     (contract_stack_id, document_id, section_number)     │
+│   - Metadata includes:                                    │
 │     {document_id, section_number, section_title,         │
-│      effective_date, embedding_model}                    │
+│      effective_date, embedding_model, is_resolved=FALSE} │
+│   - These are Stage 1 checkpoint embeddings — raw        │
+│     per-document sections, NOT yet resolved across       │
+│     amendments. Query-time search uses only              │
+│     is_resolved=TRUE embeddings (written after Stage 4). │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -126,8 +132,12 @@ class DocumentParserAgent(BaseAgent):
         sections = self._deduplicate_sections(all_sections)
 
         # Step 6: Embed and upsert to pgvector (section_embeddings table on NeonDB)
+        # These are Stage 1 checkpoint embeddings with is_resolved=FALSE.
+        # They capture raw per-document sections before override resolution.
+        # Resolved embeddings (is_resolved=TRUE) are written after Stage 4 by
+        # the orchestrator's _embed_resolved_clauses() method.
         await self._upsert_embeddings(input_data.contract_stack_id, sections, metadata)
-        await self._report_progress("embedding", 95, "Embeddings upserted to pgvector")
+        await self._report_progress("embedding", 95, "Checkpoint embeddings upserted to pgvector (is_resolved=FALSE)")
 
         return DocumentParseOutput(
             document_id=uuid4(),

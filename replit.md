@@ -8,7 +8,7 @@ ContractIQ is an agentic contract intelligence platform for clinical trial agree
 ## Tech Stack
 - **Backend**: Python 3.12, FastAPI + Uvicorn
 - **Frontend**: React 18 + TypeScript, Vite, Tailwind CSS v4, Framer Motion
-- **Database**: PostgreSQL + pgvector (Replit built-in / NeonDB for vector search)
+- **Database**: PostgreSQL + pgvector (Replit built-in / NeonDB for vector search). Uses a two-tier pgvector embedding architecture: `is_resolved=FALSE` rows hold Stage 1 checkpoint embeddings (raw parsed sections), while `is_resolved=TRUE` rows hold Stage 4 query-ready embeddings (post-override-resolution). Query-time semantic search filters on `is_resolved=TRUE` only.
 - **AI/ML**: Anthropic Claude, Azure OpenAI, Google Gemini
 - **Document Processing**: PyMuPDF, pdfplumber
 - **UI Libraries**: Lucide React (icons), TanStack React Query, React Router

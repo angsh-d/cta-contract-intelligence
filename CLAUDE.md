@@ -36,7 +36,7 @@ All agents extend `BaseAgent` with `process()` and `call_llm()` methods. Data fl
 
 **API pattern**: REST at `/api/v1/` + WebSocket at `/api/v1/ws/` for real-time processing updates.
 
-**Database layers**: PostgreSQL (NeonDB) stores structured data (contract_stacks, documents, clauses, amendments, conflicts, queries), the clause dependency graph (clause_dependencies table with recursive CTEs for multi-hop traversal), and vector embeddings for semantic search (section_embeddings table with pgvector HNSW cosine index, Gemini text-embedding-004, 768-dim).
+**Database layers**: PostgreSQL (NeonDB) stores structured data (contract_stacks, documents, clauses, amendments, conflicts, queries), the clause dependency graph (clause_dependencies table with recursive CTEs for multi-hop traversal), and vector embeddings for semantic search (section_embeddings table with pgvector HNSW cosine index, Gemini gemini-embedding-001, 768-dim). Embeddings use a two-tier architecture via the `is_resolved` column: `is_resolved=FALSE` for Stage 1 checkpoint embeddings (raw parsed sections stored during ingestion), and `is_resolved=TRUE` for Stage 4 query-ready embeddings (post-override-resolution sections used at query time for semantic search).
 
 ## Development Commands
 

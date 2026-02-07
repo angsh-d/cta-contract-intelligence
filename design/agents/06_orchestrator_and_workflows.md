@@ -444,6 +444,13 @@ class AgentOrchestrator:
         # Save resolved clauses to PostgreSQL
         await self._save_resolved_clauses(contract_stack_id, resolved_clauses)
 
+        # Embed resolved clauses for query-time semantic search (two-tier embedding)
+        # Stage 1 checkpoint embeddings (is_resolved=FALSE) were written during document parsing.
+        # Now we embed the post-resolution "truth" versions with is_resolved=TRUE.
+        # Only is_resolved=TRUE embeddings are searched at query time, ensuring users
+        # always get the current effective clause text, not superseded versions.
+        await self._embed_resolved_clauses(contract_stack_id, resolved_clauses)
+
         # ── Verification Gate: Check override resolution quality ────
         # Note: OverrideResolutionOutput has confidence on clause_version, not on the top-level object.
         # We also retrieve the original input for re-processing from sections_to_resolve.
@@ -663,6 +670,7 @@ User Query
 ┌──────────────────────────────┐
 │ Step 2: Retrieve             │
 │   - pgvector semantic search │
+│     (is_resolved=TRUE only)  │
 │   - PostgreSQL graph (CTE)   │
 │   - PostgreSQL direct lookup │
 └──────────────────────────────┘
@@ -767,8 +775,14 @@ class AgentOrchestrator:
     ) -> list[CurrentClause]:
         """Multi-source retrieval: pgvector + PostgreSQL graph + PostgreSQL direct lookup."""
 
-        # pgvector semantic search (Gemini text-embedding-004, RETRIEVAL_QUERY)
-        similar = await self.vector_store.query_similar(query_text, stack_id, n_results=10)
+        # pgvector semantic search (Gemini gemini-embedding-001, RETRIEVAL_QUERY)
+        # Only searches embeddings WHERE is_resolved = TRUE — these are the
+        # post-Stage 4 resolved clause embeddings written by _embed_resolved_clauses().
+        # Raw per-document checkpoint embeddings (is_resolved=FALSE) are excluded
+        # to prevent returning superseded clause versions in query results.
+        similar = await self.vector_store.query_similar(
+            query_text, stack_id, n_results=10, filter={"is_resolved": True}
+        )
         section_numbers = set()
         for row in similar:
             sn = row.get("section_number")
