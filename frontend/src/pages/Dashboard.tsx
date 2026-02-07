@@ -46,13 +46,12 @@ export default function Dashboard() {
 
         <motion.div variants={item} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
           <StatCard icon={FileStack} label="Contract Stacks" value={totalStacks} />
-          <StatCard icon={CheckCircle2} label="Processed" value={processed} accent="text-apple-green" />
-          <StatCard icon={Clock} label="Pending" value={pending} accent="text-apple-orange" />
+          <StatCard icon={CheckCircle2} label="Processed" value={processed} />
+          <StatCard icon={Clock} label="Pending" value={pending} />
           <StatCard
             icon={Activity}
             label="AI Engine"
             value={aiAvailable ? 'Active' : 'Offline'}
-            accent={aiAvailable ? 'text-apple-green' : 'text-apple-red'}
           />
         </motion.div>
 
@@ -62,21 +61,19 @@ export default function Dashboard() {
             icon={Plus}
             title="New Contract Stack"
             description="Upload and analyze a new set of clinical trial agreements"
-            gradient="from-apple-black to-apple-dark"
+            dark
           />
           <ActionCard
             to="/stacks"
             icon={Search}
             title="Query Contracts"
             description="Ask questions about your contract terms and obligations"
-            gradient="from-apple-blue to-apple-blue-hover"
           />
           <ActionCard
             to="/stacks"
             icon={AlertTriangle}
             title="Detect Conflicts"
             description="Run AI-powered analysis to find hidden risks"
-            gradient="from-apple-orange to-apple-red"
           />
         </motion.div>
 
@@ -84,17 +81,17 @@ export default function Dashboard() {
           <motion.div variants={item}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-[17px] font-semibold text-apple-black">Recent Contracts</h2>
-              <Link to="/stacks" className="flex items-center gap-1 text-[13px] font-medium text-apple-blue hover:text-apple-blue-hover transition-colors">
+              <Link to="/stacks" className="flex items-center gap-1 text-[13px] font-medium text-apple-gray hover:text-apple-black transition-colors">
                 View all <ArrowRight className="w-3.5 h-3.5" />
               </Link>
             </div>
-            <div className="bg-white rounded-2xl border border-apple-silver/60 overflow-hidden shadow-sm">
+            <div className="bg-white rounded-2xl border border-black/[0.04] overflow-hidden">
               {stacks.slice(0, 5).map((stack, i) => (
                 <Link
                   key={stack.id}
                   to={`/stacks/${stack.id}`}
                   className={`flex items-center justify-between px-5 py-4 hover:bg-apple-bg/50 transition-colors ${
-                    i < Math.min(stacks.length, 5) - 1 ? 'border-b border-apple-silver/40' : ''
+                    i < Math.min(stacks.length, 5) - 1 ? 'border-b border-black/[0.04]' : ''
                   }`}
                 >
                   <div className="flex items-center gap-4 min-w-0">
@@ -134,52 +131,54 @@ export default function Dashboard() {
   )
 }
 
-function StatCard({ icon: Icon, label, value, accent }: {
+function StatCard({ icon: Icon, label, value }: {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   value: string | number;
-  accent?: string;
 }) {
   return (
-    <div className="bg-white rounded-2xl border border-apple-silver/60 p-5 shadow-sm">
+    <div className="bg-white rounded-2xl border border-black/[0.04] p-5">
       <div className="flex items-center justify-between mb-3">
         <span className="text-[12px] font-medium text-apple-gray uppercase tracking-wider">{label}</span>
-        <Icon className={`w-4 h-4 ${accent || 'text-apple-gray'}`} />
+        <Icon className="w-4 h-4 text-apple-gray" />
       </div>
-      <p className={`text-[28px] font-semibold tracking-tight ${accent || 'text-apple-black'}`}>
+      <p className="text-[28px] font-semibold tracking-tight text-apple-black">
         {value}
       </p>
     </div>
   )
 }
 
-function ActionCard({ to, icon: Icon, title, description, gradient }: {
+function ActionCard({ to, icon: Icon, title, description, dark }: {
   to: string;
   icon: React.ComponentType<{ className?: string }>;
   title: string;
   description: string;
-  gradient: string;
+  dark?: boolean;
 }) {
   return (
     <Link
       to={to}
-      className={`group relative bg-gradient-to-br ${gradient} rounded-2xl p-6 text-white overflow-hidden shadow-sm hover:shadow-lg transition-all duration-300`}
+      className={`group relative rounded-2xl p-6 overflow-hidden transition-all duration-300 border ${
+        dark
+          ? 'bg-apple-black text-white border-apple-black hover:bg-apple-dark'
+          : 'bg-white text-apple-black border-black/[0.04] hover:border-apple-light hover:shadow-sm'
+      }`}
     >
-      <div className="absolute inset-0 bg-white/0 group-hover:bg-white/5 transition-colors duration-300" />
-      <Icon className="w-8 h-8 mb-4 opacity-80" />
+      <Icon className={`w-8 h-8 mb-4 ${dark ? 'opacity-80' : 'text-apple-dark'}`} />
       <h3 className="text-[15px] font-semibold mb-1">{title}</h3>
-      <p className="text-[13px] opacity-70 leading-relaxed">{description}</p>
-      <ArrowRight className="w-4 h-4 mt-4 opacity-50 group-hover:opacity-80 group-hover:translate-x-1 transition-all" />
+      <p className={`text-[13px] leading-relaxed ${dark ? 'opacity-70' : 'text-apple-gray'}`}>{description}</p>
+      <ArrowRight className={`w-4 h-4 mt-4 group-hover:translate-x-1 transition-all ${dark ? 'opacity-50 group-hover:opacity-80' : 'text-apple-light group-hover:text-apple-gray'}`} />
     </Link>
   )
 }
 
 function StatusPill({ status }: { status: string | null }) {
   const config: Record<string, { bg: string; text: string; label: string }> = {
-    completed: { bg: 'bg-apple-green/10', text: 'text-apple-green', label: 'Processed' },
-    processing: { bg: 'bg-apple-blue/10', text: 'text-apple-blue', label: 'Processing' },
-    pending: { bg: 'bg-apple-orange/10', text: 'text-apple-orange', label: 'Pending' },
-    created: { bg: 'bg-apple-silver', text: 'text-apple-gray', label: 'Created' },
+    completed: { bg: 'bg-apple-black/[0.06]', text: 'text-apple-dark', label: 'Processed' },
+    processing: { bg: 'bg-apple-silver', text: 'text-apple-dark', label: 'Processing' },
+    pending: { bg: 'bg-apple-bg', text: 'text-apple-gray', label: 'Pending' },
+    created: { bg: 'bg-apple-bg', text: 'text-apple-gray', label: 'Created' },
   }
   const c = config[status || 'pending'] || config.pending
   return (

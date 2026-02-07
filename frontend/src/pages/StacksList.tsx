@@ -49,7 +49,7 @@ export default function StacksList() {
         </div>
         <button
           onClick={() => setShowCreate(true)}
-          className="flex items-center gap-2 px-4 py-2.5 bg-apple-black text-white text-[13px] font-medium rounded-full hover:bg-apple-dark transition-colors shadow-sm"
+          className="flex items-center gap-2 px-4 py-2.5 bg-apple-black text-white text-[13px] font-medium rounded-full hover:bg-apple-dark transition-colors"
         >
           <Plus className="w-4 h-4" />
           New Stack
@@ -63,7 +63,7 @@ export default function StacksList() {
           placeholder="Search contracts..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full pl-11 pr-4 py-3 bg-white rounded-xl border border-apple-silver/60 text-[14px] text-apple-black placeholder:text-apple-light focus:outline-none focus:ring-2 focus:ring-apple-blue/30 focus:border-apple-blue/40 transition-all"
+          className="w-full pl-11 pr-4 py-3 bg-white rounded-xl border border-black/[0.04] text-[14px] text-apple-black placeholder:text-apple-light focus:outline-none focus:ring-2 focus:ring-apple-dark/20 focus:border-apple-dark/30 transition-all"
         />
       </div>
 
@@ -94,7 +94,7 @@ export default function StacksList() {
           <motion.div key={stack.id} variants={item}>
             <Link
               to={`/stacks/${stack.id}`}
-              className="flex items-center justify-between px-5 py-4 bg-white rounded-2xl border border-apple-silver/60 hover:border-apple-light hover:shadow-sm transition-all duration-200 group"
+              className="flex items-center justify-between px-5 py-4 bg-white rounded-2xl border border-black/[0.04] hover:border-apple-light hover:shadow-sm transition-all duration-200 group"
             >
               <div className="flex items-center gap-4 min-w-0">
                 <div className="w-11 h-11 rounded-xl bg-apple-bg flex items-center justify-center flex-shrink-0">
@@ -136,18 +136,18 @@ export default function StacksList() {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className="fixed inset-x-4 top-[10%] sm:inset-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 w-auto sm:w-[480px] bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl z-50 border border-apple-silver/40"
+              className="fixed inset-x-4 top-[10%] sm:inset-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 w-auto sm:w-[480px] bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl z-50 border border-black/[0.04]"
             >
-              <div className="flex items-center justify-between px-6 py-4 border-b border-apple-silver/40">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-black/[0.04]">
                 <h2 className="text-[17px] font-semibold text-apple-black">New Contract Stack</h2>
                 <button onClick={() => setShowCreate(false)} className="p-1.5 rounded-lg hover:bg-apple-silver/50 transition-colors">
                   <X className="w-5 h-5 text-apple-gray" />
                 </button>
               </div>
               <form onSubmit={handleCreate} className="p-6 space-y-4">
-                <FormField label="Study Name" required value={form.name} onChange={(v) => setForm({ ...form, name: v })} placeholder="e.g. HEARTBEAT-3" />
-                <FormField label="Sponsor" required value={form.sponsor_name} onChange={(v) => setForm({ ...form, sponsor_name: v })} placeholder="e.g. CardioVita Therapeutics" />
-                <FormField label="Site" required value={form.site_name} onChange={(v) => setForm({ ...form, site_name: v })} placeholder="e.g. Memorial Medical Center" />
+                <FormField label="Study Name (required)" value={form.name} onChange={(v) => setForm({ ...form, name: v })} placeholder="e.g. HEARTBEAT-3" required />
+                <FormField label="Sponsor (required)" value={form.sponsor_name} onChange={(v) => setForm({ ...form, sponsor_name: v })} placeholder="e.g. CardioVita Therapeutics" required />
+                <FormField label="Site (required)" value={form.site_name} onChange={(v) => setForm({ ...form, site_name: v })} placeholder="e.g. Memorial Medical Center" required />
                 <FormField label="Protocol" value={form.study_protocol} onChange={(v) => setForm({ ...form, study_protocol: v })} placeholder="e.g. CP-2847-301" />
                 <FormField label="Therapeutic Area" value={form.therapeutic_area} onChange={(v) => setForm({ ...form, therapeutic_area: v })} placeholder="e.g. Cardiology" />
                 <div className="flex justify-end gap-3 pt-2">
@@ -177,7 +177,7 @@ function FormField({ label, value, onChange, placeholder, required }: {
   return (
     <div>
       <label className="block text-[12px] font-medium text-apple-gray mb-1.5">
-        {label} {required && <span className="text-apple-red">*</span>}
+        {label}
       </label>
       <input
         type="text"
@@ -185,7 +185,7 @@ function FormField({ label, value, onChange, placeholder, required }: {
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         required={required}
-        className="w-full px-3.5 py-2.5 bg-apple-bg rounded-xl border border-apple-silver/60 text-[14px] text-apple-black placeholder:text-apple-light focus:outline-none focus:ring-2 focus:ring-apple-blue/30 focus:border-apple-blue/40 transition-all"
+        className="w-full px-3.5 py-2.5 bg-apple-bg rounded-xl border border-black/[0.04] text-[14px] text-apple-black placeholder:text-apple-light focus:outline-none focus:ring-2 focus:ring-apple-dark/20 focus:border-apple-dark/30 transition-all"
       />
     </div>
   )
@@ -193,10 +193,10 @@ function FormField({ label, value, onChange, placeholder, required }: {
 
 function StatusPill({ status }: { status: string | null }) {
   const config: Record<string, { bg: string; text: string; label: string }> = {
-    completed: { bg: 'bg-apple-green/10', text: 'text-apple-green', label: 'Processed' },
-    processing: { bg: 'bg-apple-blue/10', text: 'text-apple-blue', label: 'Processing' },
-    pending: { bg: 'bg-apple-orange/10', text: 'text-apple-orange', label: 'Pending' },
-    created: { bg: 'bg-apple-silver', text: 'text-apple-gray', label: 'Created' },
+    completed: { bg: 'bg-apple-black/[0.06]', text: 'text-apple-dark', label: 'Processed' },
+    processing: { bg: 'bg-apple-silver', text: 'text-apple-dark', label: 'Processing' },
+    pending: { bg: 'bg-apple-bg', text: 'text-apple-gray', label: 'Pending' },
+    created: { bg: 'bg-apple-bg', text: 'text-apple-gray', label: 'Created' },
   }
   const c = config[status || 'pending'] || config.pending
   return (

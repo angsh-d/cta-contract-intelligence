@@ -1,5 +1,5 @@
-import { ReactNode, useState } from 'react'
-import { NavLink, useLocation } from 'react-router-dom'
+import { useState } from 'react'
+import { NavLink, useLocation, Outlet } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard,
@@ -11,19 +11,19 @@ import {
 } from 'lucide-react'
 
 const NAV_ITEMS = [
-  { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/stacks', icon: FileStack, label: 'Contracts' },
 ]
 
-export default function AppShell({ children }: { children: ReactNode }) {
+export default function AppShell() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const location = useLocation()
 
   return (
     <div className="flex h-screen overflow-hidden bg-apple-bg">
-      <aside className="hidden lg:flex flex-col w-64 bg-white/80 backdrop-blur-xl border-r border-apple-silver/60">
-        <div className="flex items-center gap-3 px-6 h-16 border-b border-apple-silver/40">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-apple-black to-apple-dark flex items-center justify-center">
+      <aside className="hidden lg:flex flex-col w-64 bg-white/80 backdrop-blur-xl border-r border-black/[0.04]">
+        <div className="flex items-center gap-3 px-6 h-16 border-b border-black/[0.04]">
+          <div className="w-8 h-8 rounded-lg bg-apple-black flex items-center justify-center">
             <Shield className="w-4 h-4 text-white" />
           </div>
           <span className="text-[15px] font-semibold tracking-tight text-apple-black">ContractIQ</span>
@@ -33,7 +33,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
             <NavLink
               key={item.to}
               to={item.to}
-              end={item.to === '/'}
+              end={item.to === '/dashboard'}
               className={({ isActive }) =>
                 `flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200 ${
                   isActive
@@ -47,9 +47,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
             </NavLink>
           ))}
         </nav>
-        <div className="px-4 py-4 border-t border-apple-silver/40">
+        <div className="px-4 py-4 border-t border-black/[0.04]">
           <div className="flex items-center gap-2 px-2 py-2 rounded-lg bg-apple-bg/60">
-            <Zap className="w-3.5 h-3.5 text-apple-green" />
+            <Zap className="w-3.5 h-3.5 text-apple-gray" />
             <span className="text-[11px] text-apple-gray font-medium">AI Engine Active</span>
           </div>
         </div>
@@ -70,11 +70,11 @@ export default function AppShell({ children }: { children: ReactNode }) {
               animate={{ x: 0 }}
               exit={{ x: -280 }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className="fixed inset-y-0 left-0 w-64 bg-white/95 backdrop-blur-xl border-r border-apple-silver/60 z-50 lg:hidden"
+              className="fixed inset-y-0 left-0 w-64 bg-white/95 backdrop-blur-xl border-r border-black/[0.04] z-50 lg:hidden"
             >
-              <div className="flex items-center justify-between px-6 h-16 border-b border-apple-silver/40">
+              <div className="flex items-center justify-between px-6 h-16 border-b border-black/[0.04]">
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-apple-black to-apple-dark flex items-center justify-center">
+                  <div className="w-8 h-8 rounded-lg bg-apple-black flex items-center justify-center">
                     <Shield className="w-4 h-4 text-white" />
                   </div>
                   <span className="text-[15px] font-semibold tracking-tight">ContractIQ</span>
@@ -88,7 +88,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
                   <NavLink
                     key={item.to}
                     to={item.to}
-                    end={item.to === '/'}
+                    end={item.to === '/dashboard'}
                     onClick={() => setSidebarOpen(false)}
                     className={({ isActive }) =>
                       `flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200 ${
@@ -109,7 +109,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
       </AnimatePresence>
 
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="flex items-center h-14 px-4 lg:px-8 border-b border-apple-silver/40 bg-white/60 backdrop-blur-xl lg:hidden">
+        <header className="flex items-center h-14 px-4 lg:px-8 border-b border-black/[0.04] bg-white/60 backdrop-blur-xl lg:hidden">
           <button onClick={() => setSidebarOpen(true)} className="p-2 -ml-2 rounded-lg hover:bg-apple-silver/50 transition-colors">
             <Menu className="w-5 h-5 text-apple-dark" />
           </button>
@@ -125,7 +125,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
           >
-            {children}
+            <Outlet />
           </motion.div>
         </main>
       </div>

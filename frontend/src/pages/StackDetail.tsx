@@ -18,7 +18,6 @@ import {
   ChevronRight,
   Info,
   Shield,
-  Sparkles,
   Circle,
 } from 'lucide-react'
 import { useStack, useDocuments, useTimeline, useUploadDocument, useProcessStack, useQueryStack, useConflicts } from '../hooks/useApi'
@@ -119,10 +118,10 @@ export default function StackDetail() {
 function StatusBadge({ status }: { status: string | null }) {
   const s = status || 'pending'
   const map: Record<string, { bg: string; text: string; dot: string; label: string }> = {
-    completed: { bg: 'bg-apple-green/10', text: 'text-apple-green', dot: 'bg-apple-green', label: 'Processed' },
-    processing: { bg: 'bg-apple-blue/10', text: 'text-apple-blue', dot: 'bg-apple-blue', label: 'Processing' },
-    pending: { bg: 'bg-apple-orange/10', text: 'text-apple-orange', dot: 'bg-apple-orange', label: 'Pending' },
-    created: { bg: 'bg-apple-silver/60', text: 'text-apple-gray', dot: 'bg-apple-gray', label: 'Created' },
+    completed: { bg: 'bg-apple-black/[0.06]', text: 'text-apple-dark', dot: 'bg-apple-dark', label: 'Processed' },
+    processing: { bg: 'bg-apple-silver', text: 'text-apple-dark', dot: 'bg-apple-dark2', label: 'Processing' },
+    pending: { bg: 'bg-apple-bg', text: 'text-apple-gray', dot: 'bg-apple-light', label: 'Pending' },
+    created: { bg: 'bg-apple-bg', text: 'text-apple-gray', dot: 'bg-apple-light', label: 'Created' },
   }
   const c = map[s] || map.pending
   return (
@@ -153,13 +152,13 @@ function OverviewTab({ stackId, stack, documents }: { stackId: string; stack: an
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <MetricCard label="Documents" value={stack.counts?.documents ?? documents.length} icon={FileText} />
         <MetricCard label="Clauses Extracted" value={stack.counts?.clauses ?? 0} icon={Shield} />
-        <MetricCard label="Conflicts Found" value={stack.counts?.conflicts ?? 0} icon={AlertTriangle} accent={stack.counts?.conflicts > 0 ? 'text-apple-red' : undefined} />
+        <MetricCard label="Conflicts Found" value={stack.counts?.conflicts ?? 0} icon={AlertTriangle} />
       </div>
 
       <div className="flex gap-3">
         <button
           onClick={() => setShowUpload(true)}
-          className="flex items-center gap-2 px-4 py-2.5 bg-white border border-apple-silver/60 text-apple-black text-[13px] font-medium rounded-full hover:bg-apple-bg transition-colors"
+          className="flex items-center gap-2 px-4 py-2.5 bg-white border border-black/[0.04] text-apple-black text-[13px] font-medium rounded-full hover:bg-apple-bg transition-colors"
         >
           <Upload className="w-4 h-4" />
           Upload Documents
@@ -177,7 +176,7 @@ function OverviewTab({ stackId, stack, documents }: { stackId: string; stack: an
       </div>
 
       {processMutation.isSuccess && (
-        <div className="flex items-center gap-2 px-4 py-3 bg-apple-green/10 rounded-xl text-[13px] text-apple-green font-medium">
+        <div className="flex items-center gap-2 px-4 py-3 bg-apple-silver/50 rounded-xl text-[13px] text-apple-dark font-medium">
           <CheckCircle2 className="w-4 h-4" />
           Processing started. Check back shortly for results.
         </div>
@@ -186,14 +185,14 @@ function OverviewTab({ stackId, stack, documents }: { stackId: string; stack: an
       <div>
         <h3 className="text-[15px] font-semibold text-apple-black mb-3">Documents</h3>
         {documents.length === 0 ? (
-          <div className="text-center py-12 bg-white rounded-2xl border border-apple-silver/60">
+          <div className="text-center py-12 bg-white rounded-2xl border border-black/[0.04]">
             <File className="w-10 h-10 text-apple-light mx-auto mb-3" />
             <p className="text-[14px] text-apple-gray">No documents uploaded yet</p>
           </div>
         ) : (
-          <div className="bg-white rounded-2xl border border-apple-silver/60 overflow-hidden">
+          <div className="bg-white rounded-2xl border border-black/[0.04] overflow-hidden">
             {documents.map((doc: any, i: number) => (
-              <div key={doc.id} className={`flex items-center justify-between px-5 py-3.5 ${i < documents.length - 1 ? 'border-b border-apple-silver/40' : ''}`}>
+              <div key={doc.id} className={`flex items-center justify-between px-5 py-3.5 ${i < documents.length - 1 ? 'border-b border-black/[0.04]' : ''}`}>
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="w-9 h-9 rounded-lg bg-apple-bg flex items-center justify-center flex-shrink-0">
                     <FileText className="w-4 h-4 text-apple-dark" />
@@ -206,7 +205,7 @@ function OverviewTab({ stackId, stack, documents }: { stackId: string; stack: an
                 <div className="flex items-center gap-2">
                   {doc.effective_date && <span className="text-[11px] text-apple-gray">{doc.effective_date}</span>}
                   {doc.processed ? (
-                    <CheckCircle2 className="w-4 h-4 text-apple-green" />
+                    <CheckCircle2 className="w-4 h-4 text-apple-dark" />
                   ) : (
                     <Circle className="w-4 h-4 text-apple-light" />
                   )}
@@ -225,9 +224,9 @@ function OverviewTab({ stackId, stack, documents }: { stackId: string; stack: an
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="fixed inset-x-4 top-[15%] sm:inset-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 w-auto sm:w-[440px] bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl z-50 border border-apple-silver/40"
+              className="fixed inset-x-4 top-[15%] sm:inset-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 w-auto sm:w-[440px] bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl z-50 border border-black/[0.04]"
             >
-              <div className="flex items-center justify-between px-6 py-4 border-b border-apple-silver/40">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-black/[0.04]">
                 <h2 className="text-[17px] font-semibold text-apple-black">Upload Documents</h2>
                 <button onClick={() => setShowUpload(false)} className="p-1.5 rounded-lg hover:bg-apple-silver/50 transition-colors">
                   <X className="w-5 h-5 text-apple-gray" />
@@ -236,7 +235,7 @@ function OverviewTab({ stackId, stack, documents }: { stackId: string; stack: an
               <div className="p-6">
                 <div
                   className={`border-2 border-dashed rounded-2xl p-10 text-center transition-colors cursor-pointer ${
-                    dragOver ? 'border-apple-blue bg-apple-blue/5' : 'border-apple-silver hover:border-apple-light'
+                    dragOver ? 'border-apple-dark bg-apple-bg' : 'border-apple-silver hover:border-apple-light'
                   }`}
                   onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
                   onDragLeave={() => setDragOver(false)}
@@ -249,7 +248,7 @@ function OverviewTab({ stackId, stack, documents }: { stackId: string; stack: an
                   <input ref={fileInputRef} type="file" multiple accept=".pdf,.docx,.doc" className="hidden" onChange={(e) => handleUpload(e.target.files)} />
                 </div>
                 {uploadMutation.isPending && (
-                  <div className="flex items-center justify-center gap-2 mt-4 text-[13px] text-apple-blue">
+                  <div className="flex items-center justify-center gap-2 mt-4 text-[13px] text-apple-dark">
                     <Loader2 className="w-4 h-4 animate-spin" />
                     Uploading...
                   </div>
@@ -263,14 +262,14 @@ function OverviewTab({ stackId, stack, documents }: { stackId: string; stack: an
   )
 }
 
-function MetricCard({ label, value, icon: Icon, accent }: { label: string; value: number; icon: any; accent?: string }) {
+function MetricCard({ label, value, icon: Icon }: { label: string; value: number; icon: any }) {
   return (
-    <div className="bg-white rounded-2xl border border-apple-silver/60 p-5 shadow-sm">
+    <div className="bg-white rounded-2xl border border-black/[0.04] p-5">
       <div className="flex items-center justify-between mb-2">
         <span className="text-[12px] font-medium text-apple-gray uppercase tracking-wider">{label}</span>
-        <Icon className={`w-4 h-4 ${accent || 'text-apple-gray'}`} />
+        <Icon className="w-4 h-4 text-apple-gray" />
       </div>
-      <p className={`text-[24px] font-semibold tracking-tight ${accent || 'text-apple-black'}`}>{value}</p>
+      <p className="text-[24px] font-semibold tracking-tight text-apple-black">{value}</p>
     </div>
   )
 }
@@ -293,7 +292,7 @@ function TimelineTab({ stackId }: { stackId: string }) {
 
   return (
     <div className="relative">
-      <div className="absolute left-6 top-0 bottom-0 w-px bg-apple-silver/60" />
+      <div className="absolute left-6 top-0 bottom-0 w-px bg-apple-silver" />
       <div className="space-y-0">
         {timeline.map((entry: TimelineEntry, i: number) => (
           <motion.div
@@ -310,7 +309,7 @@ function TimelineTab({ stackId }: { stackId: string }) {
                 <FileText className={`w-5 h-5 ${entry.document_type === 'cta' ? 'text-white' : 'text-apple-dark'}`} />
               </div>
             </div>
-            <div className="flex-1 bg-white rounded-2xl border border-apple-silver/60 p-4 shadow-sm">
+            <div className="flex-1 bg-white rounded-2xl border border-black/[0.04] p-4">
               <div className="flex items-start justify-between">
                 <div>
                   <p className="text-[14px] font-medium text-apple-black">{entry.filename}</p>
@@ -323,7 +322,7 @@ function TimelineTab({ stackId }: { stackId: string }) {
                 )}
               </div>
               {entry.document_version && (
-                <span className="inline-block mt-2 text-[11px] text-apple-blue bg-apple-blue/8 px-2 py-0.5 rounded-md font-medium">
+                <span className="inline-block mt-2 text-[11px] text-apple-dark bg-apple-silver/60 px-2 py-0.5 rounded-md font-medium">
                   {entry.document_version}
                 </span>
               )}
@@ -361,8 +360,8 @@ function QueryTab({ stackId }: { stackId: string }) {
       <div className="flex-1 overflow-y-auto space-y-6 pb-4">
         {history.length === 0 && !queryMutation.isPending && (
           <div className="text-center py-16">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-apple-blue/10 to-apple-blue/5 flex items-center justify-center mx-auto mb-4">
-              <Sparkles className="w-8 h-8 text-apple-blue" />
+            <div className="w-16 h-16 rounded-2xl bg-apple-bg flex items-center justify-center mx-auto mb-4">
+              <MessageSquare className="w-8 h-8 text-apple-gray" />
             </div>
             <h3 className="text-[17px] font-semibold text-apple-black mb-1">Ask anything about your contracts</h3>
             <p className="text-[14px] text-apple-gray max-w-md mx-auto">
@@ -377,7 +376,7 @@ function QueryTab({ stackId }: { stackId: string }) {
                 <button
                   key={suggestion}
                   onClick={() => setQuery(suggestion)}
-                  className="px-3.5 py-2 bg-white border border-apple-silver/60 rounded-xl text-[12px] text-apple-dark hover:bg-apple-bg transition-colors"
+                  className="px-3.5 py-2 bg-white border border-black/[0.04] rounded-xl text-[12px] text-apple-dark hover:bg-apple-bg transition-colors"
                 >
                   {suggestion}
                 </button>
@@ -389,19 +388,19 @@ function QueryTab({ stackId }: { stackId: string }) {
         {history.map((item, i) => (
           <div key={i} className="space-y-4">
             <div className="flex justify-end">
-              <div className="max-w-[80%] bg-apple-black text-white px-4 py-3 rounded-2xl rounded-br-md">
+              <div className="max-w-[80%] bg-apple-dark text-white px-4 py-3 rounded-2xl rounded-br-md">
                 <p className="text-[14px]">{item.query}</p>
               </div>
             </div>
             <div className="flex justify-start">
-              <div className="max-w-[85%] bg-white border border-apple-silver/60 px-5 py-4 rounded-2xl rounded-bl-md shadow-sm">
+              <div className="max-w-[85%] bg-apple-bg border border-black/[0.04] px-5 py-4 rounded-2xl rounded-bl-md">
                 <p className="text-[14px] text-apple-black leading-relaxed whitespace-pre-wrap">{item.response.response.answer}</p>
                 {item.response.response.sources.length > 0 && (
-                  <div className="mt-3 pt-3 border-t border-apple-silver/40">
+                  <div className="mt-3 pt-3 border-t border-black/[0.04]">
                     <p className="text-[11px] font-medium text-apple-gray uppercase tracking-wider mb-2">Sources</p>
                     <div className="space-y-1">
                       {item.response.response.sources.map((src, j) => (
-                        <div key={j} className="flex items-center gap-2 text-[12px] text-apple-blue">
+                        <div key={j} className="flex items-center gap-2 text-[12px] text-apple-dark">
                           <FileText className="w-3 h-3" />
                           <span>{src.section_number || src.document_id || `Source ${j + 1}`}</span>
                           {src.confidence != null && <span className="text-apple-gray">({Math.round(src.confidence * 100)}%)</span>}
@@ -421,9 +420,9 @@ function QueryTab({ stackId }: { stackId: string }) {
 
         {queryMutation.isPending && (
           <div className="flex justify-start">
-            <div className="bg-white border border-apple-silver/60 px-5 py-4 rounded-2xl shadow-sm">
+            <div className="bg-apple-bg border border-black/[0.04] px-5 py-4 rounded-2xl">
               <div className="flex items-center gap-2 text-[13px] text-apple-gray">
-                <Loader2 className="w-4 h-4 animate-spin text-apple-blue" />
+                <Loader2 className="w-4 h-4 animate-spin text-apple-dark" />
                 Analyzing contracts...
               </div>
             </div>
@@ -432,13 +431,13 @@ function QueryTab({ stackId }: { stackId: string }) {
         <div ref={chatEndRef} />
       </div>
 
-      <form onSubmit={handleSubmit} className="flex gap-3 pt-4 border-t border-apple-silver/40">
+      <form onSubmit={handleSubmit} className="flex gap-3 pt-4 border-t border-black/[0.04]">
         <input
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Ask about your contract terms..."
-          className="flex-1 px-4 py-3 bg-white rounded-xl border border-apple-silver/60 text-[14px] text-apple-black placeholder:text-apple-light focus:outline-none focus:ring-2 focus:ring-apple-blue/30 focus:border-apple-blue/40 transition-all"
+          className="flex-1 px-4 py-3 bg-white rounded-xl border border-black/[0.04] text-[14px] text-apple-black placeholder:text-apple-light focus:outline-none focus:ring-2 focus:ring-apple-dark/20 focus:border-apple-dark/30 transition-all"
         />
         <button
           type="submit"
@@ -464,18 +463,18 @@ function ConflictsTab({ stackId }: { stackId: string }) {
   const data = conflictsMutation.data
   const conflicts = data?.conflicts || []
 
-  const severityConfig: Record<string, { border: string; bg: string; icon: string; dot: string }> = {
-    critical: { border: 'border-apple-red/30', bg: 'bg-apple-red/5', icon: 'text-apple-red', dot: 'bg-apple-red' },
-    high: { border: 'border-apple-orange/30', bg: 'bg-apple-orange/5', icon: 'text-apple-orange', dot: 'bg-apple-orange' },
-    medium: { border: 'border-apple-yellow/30', bg: 'bg-apple-yellow/5', icon: 'text-apple-yellow', dot: 'bg-apple-yellow' },
-    low: { border: 'border-apple-blue/30', bg: 'bg-apple-blue/5', icon: 'text-apple-blue', dot: 'bg-apple-blue' },
+  const severityConfig: Record<string, { border: string; bg: string; weight: string }> = {
+    critical: { border: 'border-apple-black/30', bg: 'bg-apple-black/[0.03]', weight: 'border-l-4 border-l-apple-black' },
+    high: { border: 'border-apple-dark/20', bg: 'bg-apple-dark/[0.02]', weight: 'border-l-4 border-l-apple-dark2' },
+    medium: { border: 'border-apple-gray/20', bg: 'bg-apple-gray/[0.02]', weight: 'border-l-4 border-l-apple-gray' },
+    low: { border: 'border-apple-light/40', bg: 'bg-apple-light/[0.02]', weight: 'border-l-4 border-l-apple-light' },
   }
 
   if (!analyzed && !conflictsMutation.isPending) {
     return (
       <div className="text-center py-16">
-        <div className="w-16 h-16 rounded-2xl bg-apple-orange/10 flex items-center justify-center mx-auto mb-4">
-          <AlertTriangle className="w-8 h-8 text-apple-orange" />
+        <div className="w-16 h-16 rounded-2xl bg-apple-bg flex items-center justify-center mx-auto mb-4">
+          <AlertTriangle className="w-8 h-8 text-apple-gray" />
         </div>
         <h3 className="text-[17px] font-semibold text-apple-black mb-1">Conflict Analysis</h3>
         <p className="text-[14px] text-apple-gray mb-6 max-w-md mx-auto">
@@ -495,7 +494,7 @@ function ConflictsTab({ stackId }: { stackId: string }) {
   if (conflictsMutation.isPending) {
     return (
       <div className="text-center py-16">
-        <Loader2 className="w-8 h-8 text-apple-blue animate-spin mx-auto mb-4" />
+        <Loader2 className="w-8 h-8 text-apple-dark animate-spin mx-auto mb-4" />
         <p className="text-[15px] font-medium text-apple-black">Analyzing conflicts...</p>
         <p className="text-[13px] text-apple-gray mt-1">This may take a moment</p>
       </div>
@@ -507,10 +506,15 @@ function ConflictsTab({ stackId }: { stackId: string }) {
       {data?.summary && Object.keys(data.summary).length > 0 && (
         <div className="flex gap-3 mb-6 flex-wrap">
           {Object.entries(data.summary).map(([severity, count]) => {
-            const sc = severityConfig[severity] || severityConfig.low
+            const dotShade: Record<string, string> = {
+              critical: 'bg-apple-black',
+              high: 'bg-apple-dark2',
+              medium: 'bg-apple-gray',
+              low: 'bg-apple-light',
+            }
             return (
-              <div key={severity} className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-[12px] font-medium ${sc.bg} border ${sc.border}`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${sc.dot}`} />
+              <div key={severity} className="flex items-center gap-2 px-3 py-1.5 rounded-full text-[12px] font-medium bg-apple-bg border border-black/[0.04]">
+                <span className={`w-1.5 h-1.5 rounded-full ${dotShade[severity] || 'bg-apple-light'}`} />
                 <span className="capitalize">{severity}: {count}</span>
               </div>
             )
@@ -520,7 +524,7 @@ function ConflictsTab({ stackId }: { stackId: string }) {
 
       {conflicts.length === 0 && (
         <div className="text-center py-12">
-          <CheckCircle2 className="w-10 h-10 text-apple-green mx-auto mb-3" />
+          <CheckCircle2 className="w-10 h-10 text-apple-dark mx-auto mb-3" />
           <p className="text-[15px] font-medium text-apple-black">No conflicts detected</p>
           <p className="text-[13px] text-apple-gray mt-1">Your contract stack appears consistent</p>
         </div>
@@ -530,20 +534,20 @@ function ConflictsTab({ stackId }: { stackId: string }) {
         {conflicts.map((conflict: Conflict) => {
           const sc = severityConfig[conflict.severity] || severityConfig.low
           return (
-            <div key={conflict.id} className={`bg-white rounded-2xl border ${sc.border} p-5 shadow-sm`}>
+            <div key={conflict.id} className={`bg-white rounded-2xl border border-black/[0.04] p-5 ${sc.weight}`}>
               <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-2">
-                  <AlertTriangle className={`w-4 h-4 ${sc.icon}`} />
+                  <AlertTriangle className="w-4 h-4 text-apple-dark" />
                   <span className="text-[13px] font-semibold text-apple-black capitalize">{conflict.conflict_type.replace('_', ' ')}</span>
                 </div>
-                <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium uppercase tracking-wider ${sc.bg} ${sc.icon}`}>
+                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-medium uppercase tracking-wider bg-apple-bg text-apple-gray">
                   {conflict.severity}
                 </span>
               </div>
               <p className="text-[14px] text-apple-dark leading-relaxed mb-3">{conflict.description}</p>
               {conflict.recommendation && (
                 <div className="flex gap-2 bg-apple-bg/60 rounded-xl p-3">
-                  <Info className="w-4 h-4 text-apple-blue flex-shrink-0 mt-0.5" />
+                  <Info className="w-4 h-4 text-apple-gray flex-shrink-0 mt-0.5" />
                   <p className="text-[13px] text-apple-dark">{conflict.recommendation}</p>
                 </div>
               )}
@@ -585,7 +589,7 @@ function RippleTab({ stackId }: { stackId: string }) {
 
   return (
     <div>
-      <div className="bg-white rounded-2xl border border-apple-silver/60 p-6 shadow-sm mb-6">
+      <div className="bg-white rounded-2xl border border-black/[0.04] p-6 mb-6">
         <h3 className="text-[15px] font-semibold text-apple-black mb-4">Propose a Change</h3>
         <form onSubmit={handleAnalyze} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -596,7 +600,7 @@ function RippleTab({ stackId }: { stackId: string }) {
                 value={change.clause_section}
                 onChange={(e) => setChange({ ...change, clause_section: e.target.value })}
                 placeholder="e.g. 7.2"
-                className="w-full px-3.5 py-2.5 bg-apple-bg rounded-xl border border-apple-silver/60 text-[14px] text-apple-black placeholder:text-apple-light focus:outline-none focus:ring-2 focus:ring-apple-blue/30 transition-all"
+                className="w-full px-3.5 py-2.5 bg-apple-bg rounded-xl border border-black/[0.04] text-[14px] text-apple-black placeholder:text-apple-light focus:outline-none focus:ring-2 focus:ring-apple-dark/20 transition-all"
               />
             </div>
             <div>
@@ -604,7 +608,7 @@ function RippleTab({ stackId }: { stackId: string }) {
               <select
                 value={change.change_type}
                 onChange={(e) => setChange({ ...change, change_type: e.target.value })}
-                className="w-full px-3.5 py-2.5 bg-apple-bg rounded-xl border border-apple-silver/60 text-[14px] text-apple-black focus:outline-none focus:ring-2 focus:ring-apple-blue/30 transition-all appearance-none"
+                className="w-full px-3.5 py-2.5 bg-apple-bg rounded-xl border border-black/[0.04] text-[14px] text-apple-black focus:outline-none focus:ring-2 focus:ring-apple-dark/20 transition-all appearance-none"
               >
                 <option value="modify">Modify</option>
                 <option value="add">Add</option>
@@ -620,7 +624,7 @@ function RippleTab({ stackId }: { stackId: string }) {
               onChange={(e) => setChange({ ...change, description: e.target.value })}
               placeholder="Describe the proposed change..."
               rows={3}
-              className="w-full px-3.5 py-2.5 bg-apple-bg rounded-xl border border-apple-silver/60 text-[14px] text-apple-black placeholder:text-apple-light focus:outline-none focus:ring-2 focus:ring-apple-blue/30 transition-all resize-none"
+              className="w-full px-3.5 py-2.5 bg-apple-bg rounded-xl border border-black/[0.04] text-[14px] text-apple-black placeholder:text-apple-light focus:outline-none focus:ring-2 focus:ring-apple-dark/20 transition-all resize-none"
             />
           </div>
           <button
@@ -635,14 +639,14 @@ function RippleTab({ stackId }: { stackId: string }) {
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 px-4 py-3 bg-apple-red/10 rounded-xl text-[13px] text-apple-red font-medium mb-6">
+        <div className="flex items-center gap-2 px-4 py-3 bg-apple-silver/50 rounded-xl text-[13px] text-apple-dark font-medium mb-6">
           <AlertTriangle className="w-4 h-4" />
           {error}
         </div>
       )}
 
       {result && (
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-white rounded-2xl border border-apple-silver/60 p-6 shadow-sm">
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-white rounded-2xl border border-black/[0.04] p-6">
           <h3 className="text-[15px] font-semibold text-apple-black mb-4">Analysis Results</h3>
           <pre className="text-[13px] text-apple-dark bg-apple-bg rounded-xl p-4 overflow-x-auto whitespace-pre-wrap font-mono leading-relaxed">
             {JSON.stringify(result, null, 2)}
