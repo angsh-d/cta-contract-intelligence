@@ -18,7 +18,7 @@ This project is in the **planning/early implementation phase**. The repository c
 ## Tech Stack
 
 - **Backend**: Python 3.11+ / FastAPI / Celery / Redis
-- **Databases**: PostgreSQL 15+ via NeonDB (relational + clause dependency graph via recursive CTEs), ChromaDB (vector search), Redis (cache)
+- **Databases**: PostgreSQL 15+ via NeonDB (relational + clause dependency graph via recursive CTEs + pgvector for semantic search), Redis (cache)
 - **AI/ML**: Anthropic Claude API (Opus for complex reasoning, Sonnet for extraction), Azure OpenAI, Gemini
 - **Document Processing**: PyMuPDF, pdfplumber, python-docx
 - **Frontend**: React 18+ / TypeScript / Tailwind CSS / shadcn/ui
@@ -32,11 +32,11 @@ Three-tier agent system orchestrated by a central Agent Orchestrator:
 - **Tier 3 — Analysis**: `RippleEffectAnalyzerAgent`, `ReusabilityAnalyzerAgent` (Phase 2)
 - **Query Pipeline**: `QueryRouter`, `TruthSynthesizer`
 
-All agents extend `BaseAgent` with `process()` and `call_llm()` methods. Data flows: PDF upload -> Tier 1 extraction -> PostgreSQL (NeonDB) + ChromaDB storage -> Tier 2 reasoning -> Tier 3 analysis -> API response.
+All agents extend `BaseAgent` with `process()` and `call_llm()` methods. Data flows: PDF upload -> Tier 1 extraction -> PostgreSQL (NeonDB) storage (structured data + pgvector embeddings) -> Tier 2 reasoning -> Tier 3 analysis -> API response.
 
 **API pattern**: REST at `/api/v1/` + WebSocket at `/api/v1/ws/` for real-time processing updates.
 
-**Database layers**: PostgreSQL (NeonDB) stores structured data (contract_stacks, documents, clauses, amendments, conflicts, queries) and the clause dependency graph (clause_dependencies table with recursive CTEs for multi-hop traversal). ChromaDB stores embeddings for semantic search.
+**Database layers**: PostgreSQL (NeonDB) stores structured data (contract_stacks, documents, clauses, amendments, conflicts, queries), the clause dependency graph (clause_dependencies table with recursive CTEs for multi-hop traversal), and vector embeddings for semantic search (section_embeddings table with pgvector HNSW cosine index, Gemini text-embedding-004, 768-dim).
 
 ## Development Commands
 
@@ -57,7 +57,7 @@ pytest tests/test_specific.py::test_name  # single test
 # Database migrations
 alembic upgrade head
 
-# Docker services (Redis only — PostgreSQL is NeonDB cloud, ChromaDB is local)
+# Docker services (Redis only — PostgreSQL + pgvector is NeonDB cloud)
 docker-compose up -d
 ```
 

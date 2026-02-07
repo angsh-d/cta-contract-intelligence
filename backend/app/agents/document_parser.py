@@ -18,12 +18,12 @@ logger = logging.getLogger(__name__)
 class DocumentParserAgent(BaseAgent):
     """Extract text, structure, tables, and metadata from PDFs."""
 
-    def __init__(self, config, llm_provider, prompt_loader, chroma_collection,
+    def __init__(self, config, llm_provider, prompt_loader, vector_store,
                  progress_callback=None, fallback_provider=None,
                  trace_context=None, llm_semaphore=None):
         super().__init__(config, llm_provider, prompt_loader, progress_callback,
                          fallback_provider, trace_context, llm_semaphore)
-        self.chroma = chroma_collection
+        self.vector_store = vector_store
 
     async def process(self, input_data: DocumentParseInput) -> DocumentParseOutput:
         start = time.monotonic()
@@ -74,9 +74,9 @@ class DocumentParserAgent(BaseAgent):
         # Step 5: Deduplicate sections from overlapping chunks
         sections = self._deduplicate_sections(all_sections)
 
-        # Step 6: Embed and upsert to ChromaDB
+        # Step 6: Embed and upsert to pgvector
         await self._upsert_embeddings(input_data.contract_stack_id, sections, metadata, input_data.document_id)
-        await self._report_progress("embedding", 95, "Embeddings upserted to ChromaDB")
+        await self._report_progress("embedding", 95, "Embeddings upserted to pgvector")
 
         return DocumentParseOutput(
             document_id=input_data.document_id,
@@ -140,25 +140,21 @@ class DocumentParserAgent(BaseAgent):
         return list(seen.values())
 
     async def _upsert_embeddings(self, contract_stack_id, sections, metadata, document_id=None):
-        """Upsert section texts to ChromaDB for semantic search."""
+        """Upsert section embeddings to pgvector for semantic search."""
         if not sections:
             return
-        ids = []
-        documents = []
-        metadatas = []
-        for s in sections:
-            chroma_id = f"{contract_stack_id}_{s.section_number}"
-            ids.append(chroma_id)
-            documents.append(s.text[:8000])
-            meta = {
-                "contract_stack_id": str(contract_stack_id),
+        section_dicts = [
+            {
                 "section_number": s.section_number,
                 "section_title": s.section_title,
+                "text": s.text,
             }
-            if document_id:
-                meta["document_id"] = str(document_id)
-            if metadata and metadata.effective_date:
-                meta["effective_date"] = str(metadata.effective_date)
-            metadatas.append(meta)
-
-        self.chroma.upsert(ids=ids, documents=documents, metadatas=metadatas)
+            for s in sections
+        ]
+        effective_date = str(metadata.effective_date) if metadata and metadata.effective_date else None
+        await self.vector_store.upsert_embeddings(
+            contract_stack_id=contract_stack_id,
+            sections=section_dicts,
+            document_id=document_id,
+            effective_date=effective_date,
+        )

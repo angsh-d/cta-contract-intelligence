@@ -1,10 +1,10 @@
-"""Database connection factories for PostgreSQL (NeonDB) and ChromaDB."""
+"""Database connection factories for PostgreSQL (NeonDB) and pgvector."""
 
 import os
-from pathlib import Path
 import asyncpg
-import chromadb
 from dotenv import load_dotenv
+
+from app.database.vector_store import VectorStore
 
 load_dotenv()
 
@@ -20,15 +20,6 @@ async def create_postgres_pool() -> asyncpg.Pool:
     )
 
 
-def create_chroma_collection(
-    collection_name: str = "contractiq_clauses",
-    persist_dir: str | None = None,
-) -> chromadb.Collection:
-    """Create or get ChromaDB collection for clause embeddings."""
-    persist_dir = persist_dir or os.environ.get("CHROMA_PERSIST_DIR", "./chroma_data")
-    Path(persist_dir).mkdir(parents=True, exist_ok=True)
-    client = chromadb.PersistentClient(path=persist_dir)
-    return client.get_or_create_collection(
-        name=collection_name,
-        metadata={"hnsw:space": "cosine"},
-    )
+def create_vector_store(postgres_pool: asyncpg.Pool) -> VectorStore:
+    """Create VectorStore backed by pgvector on the shared PostgreSQL pool."""
+    return VectorStore(postgres_pool)

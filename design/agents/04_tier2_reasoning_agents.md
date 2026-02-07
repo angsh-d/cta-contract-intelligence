@@ -277,7 +277,7 @@ def __init__(self, config, llm_provider, prompt_loader, db_pool,
         ]
 
     async def _execute_tool(self, tool_name: str, tool_input: dict) -> Any:
-        """Execute tool calls against PostgreSQL and ChromaDB."""
+        """Execute tool calls against PostgreSQL and pgvector."""
         async with self.db.acquire() as conn:
             if tool_name == "get_clause":
                 row = await conn.fetchrow(

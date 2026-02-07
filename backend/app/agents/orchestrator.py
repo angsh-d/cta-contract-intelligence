@@ -106,9 +106,9 @@ class InMemoryCache:
 class AgentOrchestrator:
     """Central coordinator for all ContractIQ agents."""
 
-    def __init__(self, postgres_pool, chroma_collection) -> None:
+    def __init__(self, postgres_pool, vector_store) -> None:
         self.postgres = postgres_pool
-        self.chroma = chroma_collection
+        self.vector_store = vector_store
         self.blackboard = InMemoryBlackboard()
         self.cache = InMemoryCache()
 
@@ -130,7 +130,7 @@ class AgentOrchestrator:
                                verification_threshold=0.80),
             llm_provider=factory.get_for_role("extraction"),
             prompt_loader=prompt_loader,
-            chroma_collection=self.chroma,
+            vector_store=self.vector_store,
             fallback_provider=factory.get_fallback_for_role("extraction"),
             llm_semaphore=self._llm_semaphore,
         )
@@ -282,18 +282,15 @@ class AgentOrchestrator:
                         clause_category=r["clause_category"] or "general",
                     ))
             else:
-                # If no clauses yet (stages 1-2 done but not 4), use chroma as fallback
-                chroma_results = self.chroma.get(
-                    where={"document_id": str(doc["id"])},
-                )
-                if chroma_results and chroma_results.get("metadatas"):
-                    for i, meta in enumerate(chroma_results["metadatas"]):
-                        sections.append(ParsedSection(
-                            section_number=meta.get("section_number", ""),
-                            section_title=meta.get("section_title", ""),
-                            text=chroma_results["documents"][i] if chroma_results.get("documents") else "",
-                            clause_category=meta.get("clause_category", "general"),
-                        ))
+                # If no clauses yet (stages 1-2 done but not 4), use pgvector as fallback
+                embedding_rows = await self.vector_store.get_by_document(doc["id"])
+                for row in embedding_rows:
+                    sections.append(ParsedSection(
+                        section_number=row["section_number"],
+                        section_title=row.get("section_title", ""),
+                        text=row.get("section_text", ""),
+                        clause_category="general",
+                    ))
             outputs.append(DocumentParseOutput(
                 document_id=doc["id"],
                 metadata=metadata,
@@ -711,18 +708,13 @@ class AgentOrchestrator:
         return inputs
 
     async def _retrieve_clauses(self, query_text, stack_id, route_result) -> list[CurrentClause]:
-        """Multi-source clause retrieval: ChromaDB + PostgreSQL (batch query)."""
-        results = self.chroma.query(
-            query_texts=[query_text], n_results=10,
-            where={"contract_stack_id": str(stack_id)},
-        )
+        """Multi-source clause retrieval: pgvector + PostgreSQL (batch query)."""
+        similar = await self.vector_store.query_similar(query_text, stack_id, n_results=10)
         section_numbers = set()
-        if results and results.get("metadatas"):
-            for meta_list in results["metadatas"]:
-                for meta in meta_list:
-                    sn = meta.get("section_number")
-                    if sn:
-                        section_numbers.add(sn)
+        for row in similar:
+            sn = row.get("section_number")
+            if sn:
+                section_numbers.add(sn)
         for entity in route_result.extracted_entities:
             section_numbers.add(entity)
 

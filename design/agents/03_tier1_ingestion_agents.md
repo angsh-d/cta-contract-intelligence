@@ -75,12 +75,12 @@ AgentConfig(
 │   - Effective date, parties, study protocol              │
 │   - Extracted as part of the LLM structuring call        │
 ├─────────────────────────────────────────────────────────┤
-│ Step 6: ChromaDB Embedding Upsert                         │
-│   - Embed each section's text via Azure OpenAI           │
-│     (text-embedding-3-large)                            │
-│   - Upsert to ChromaDB collection with metadata:        │
+│ Step 6: pgvector Embedding Upsert (NeonDB)                 │
+│   - Embed each section's text via Gemini                 │
+│     (text-embedding-004, 768-dim, RETRIEVAL_DOCUMENT)   │
+│   - Upsert to section_embeddings table with metadata:    │
 │     {document_id, section_number, section_title,         │
-│      clause_category, effective_date}                   │
+│      effective_date, embedding_model}                    │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -125,9 +125,9 @@ class DocumentParserAgent(BaseAgent):
         # Step 5: Deduplicate sections from overlapping chunks
         sections = self._deduplicate_sections(all_sections)
 
-        # Step 6: Embed and upsert to ChromaDB
+        # Step 6: Embed and upsert to pgvector (section_embeddings table on NeonDB)
         await self._upsert_embeddings(input_data.contract_stack_id, sections, metadata)
-        await self._report_progress("embedding", 95, "Embeddings upserted to ChromaDB")
+        await self._report_progress("embedding", 95, "Embeddings upserted to pgvector")
 
         return DocumentParseOutput(
             document_id=uuid4(),

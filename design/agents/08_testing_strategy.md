@@ -53,7 +53,7 @@ backend/tests/
 │   ├── test_circuit_breaker.py
 │   └── test_error_paths.py          # negative/error path tests
 ├── integration/
-│   ├── conftest.py                  # DB fixtures (PostgreSQL/NeonDB, ChromaDB, Redis)
+│   ├── conftest.py                  # DB fixtures (PostgreSQL/NeonDB + pgvector, Redis)
 │   ├── test_ingestion_pipeline.py
 │   ├── test_query_pipeline.py
 │   └── test_heartbeat3_pain_points.py
@@ -926,22 +926,23 @@ async def test_blackboard_clear(redis_client):
 
 ## 4. Integration Tests — HEARTBEAT-3 Acceptance
 
-These tests use MockLLMProvider with realistic fixture data but connect to real PostgreSQL (NeonDB) and ChromaDB.
+These tests use MockLLMProvider with realistic fixture data but connect to real PostgreSQL (NeonDB + pgvector).
 
 ```python
 # backend/tests/integration/conftest.py
 
 import pytest
 import asyncpg
-import chromadb
+
+from app.database.vector_store import VectorStore
 
 @pytest.fixture(scope="session")
 async def postgres_pool():
-    """Create a test PostgreSQL database (NeonDB) and return a connection pool."""
+    """Create a test PostgreSQL database (NeonDB + pgvector) and return a connection pool."""
     import os
     dsn = os.getenv("EXTERNAL_DATABASE_URL")  # NeonDB connection string
     pool = await asyncpg.create_pool(dsn=dsn)
-    # Run schema migrations
+    # Run schema migrations (includes pgvector extension + section_embeddings table)
     async with pool.acquire() as conn:
         schema = Path("backend/db/schema.sql").read_text()
         await conn.execute(schema)
@@ -952,22 +953,19 @@ async def postgres_pool():
     await pool.close()
 
 @pytest.fixture(scope="session")
-def chroma_collection():
-    """Create a test ChromaDB collection (in-memory for tests)."""
-    client = chromadb.Client()  # ephemeral in-memory client
-    collection = client.get_or_create_collection("test_clauses")
-    yield collection
-    client.delete_collection("test_clauses")
+def vector_store(postgres_pool):
+    """Create a VectorStore backed by pgvector on the test PostgreSQL pool."""
+    return VectorStore(postgres_pool)
 
 @pytest.fixture
-async def orchestrator(postgres_pool, chroma_collection, mock_llm):
+async def orchestrator(postgres_pool, vector_store, mock_llm):
     """Create an AgentOrchestrator with real DB but mock LLM."""
     import redis.asyncio as aioredis
     redis_client = aioredis.from_url("redis://localhost:6379/1")  # DB 1 for tests
     orchestrator = AgentOrchestrator(
         postgres_pool=postgres_pool,
         redis_client=redis_client,
-        chroma_collection=chroma_collection,
+        vector_store=vector_store,
     )
     yield orchestrator
     await redis_client.flushdb()

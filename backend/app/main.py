@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import router as api_router
 from app.api.websocket import router as ws_router
-from app.database.db import create_chroma_collection, create_postgres_pool
+from app.database.db import create_postgres_pool, create_vector_store
 from app.logging_config import setup_logging
 
 load_dotenv()
@@ -24,7 +24,7 @@ async def lifespan(app: FastAPI):
     logger.info("Starting ContractIQ...")
 
     postgres_pool = await create_postgres_pool()
-    chroma_collection = create_chroma_collection()
+    vector_store = create_vector_store(postgres_pool)
 
     # Store pool on app.state for direct use in routes
     app.state.postgres_pool = postgres_pool
@@ -34,7 +34,7 @@ async def lifespan(app: FastAPI):
 
         app.state.orchestrator = AgentOrchestrator(
             postgres_pool=postgres_pool,
-            chroma_collection=chroma_collection,
+            vector_store=vector_store,
         )
         logger.info("ContractIQ ready — orchestrator initialised with %d agents",
                     len(app.state.orchestrator.agents))

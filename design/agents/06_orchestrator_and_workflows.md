@@ -33,11 +33,11 @@ class AgentOrchestrator:
         self,
         postgres_pool,          # asyncpg pool (NeonDB)
         redis_client,           # redis.asyncio.Redis
-        chroma_collection,      # chromadb.Collection
+        vector_store,           # VectorStore (pgvector on NeonDB)
     ) -> None:
         self.postgres = postgres_pool
         self.redis = redis_client
-        self.chroma = chroma_collection
+        self.vector_store = vector_store
         self.blackboard = AgentBlackboard(redis_client)
 
         # Shared resources
@@ -146,12 +146,12 @@ async def lifespan(app: FastAPI):
     # Startup: create shared resources + orchestrator
     postgres_pool = await create_postgres_pool()  # NeonDB via EXTERNAL_DATABASE_URL
     redis_client = await create_redis_client()
-    chroma_collection = create_chroma_collection()  # local ChromaDB, persisted to CHROMA_PERSIST_DIR
+    vector_store = create_vector_store(postgres_pool)  # pgvector on NeonDB (shared pool)
 
     app.state.orchestrator = AgentOrchestrator(
         postgres_pool=postgres_pool,
         redis_client=redis_client,
-        chroma_collection=chroma_collection,
+        vector_store=vector_store,
     )
 
     yield
@@ -593,14 +593,14 @@ async def _run_pipeline(contract_stack_id: str, job_id: str) -> dict:
     # Create fresh connections for this worker process
     postgres_pool = await create_postgres_pool()  # NeonDB
     redis_client = aioredis.from_url("redis://localhost:6379/0")
-    chroma_collection = create_chroma_collection()
+    vector_store = create_vector_store(postgres_pool)  # pgvector on NeonDB
 
     try:
         # Create orchestrator for this task
         orchestrator = AgentOrchestrator(
             postgres_pool=postgres_pool,
             redis_client=redis_client,
-            chroma_collection=chroma_collection,
+            vector_store=vector_store,
         )
 
         # Set initial state with TTL
@@ -662,7 +662,7 @@ User Query
      ▼
 ┌──────────────────────────────┐
 │ Step 2: Retrieve             │
-│   - ChromaDB semantic search │
+│   - pgvector semantic search │
 │   - PostgreSQL graph (CTE)   │
 │   - PostgreSQL direct lookup │
 └──────────────────────────────┘
@@ -765,29 +765,40 @@ class AgentOrchestrator:
     async def _retrieve_clauses(
         self, query_text: str, stack_id: UUID, route: QueryRouteOutput
     ) -> list[CurrentClause]:
-        """Multi-source retrieval: ChromaDB + PostgreSQL graph + PostgreSQL direct lookup."""
+        """Multi-source retrieval: pgvector + PostgreSQL graph + PostgreSQL direct lookup."""
 
-        # ChromaDB semantic search
-        embedding = await self._embed_text(query_text)
-        chroma_results = self.chroma.query(
-            query_embeddings=[embedding],
-            n_results=10,
-            where={"contract_stack_id": str(stack_id)},
-        )
+        # pgvector semantic search (Gemini text-embedding-004, RETRIEVAL_QUERY)
+        similar = await self.vector_store.query_similar(query_text, stack_id, n_results=10)
+        section_numbers = set()
+        for row in similar:
+            sn = row.get("section_number")
+            if sn:
+                section_numbers.add(sn)
 
-        # PostgreSQL graph: if entities reference specific sections, get their dependency neighbors
-        graph_sections = []
+        # Add entity-based section matches
         for entity in route.extracted_entities:
-            neighbors = await self._get_dependency_neighbors(stack_id, entity)
-            graph_sections.extend(neighbors)
+            section_numbers.add(entity)
+        section_numbers.discard(None)
 
-        # PostgreSQL: direct lookup for any specific section numbers mentioned
-        pg_clauses = await self._get_clauses_by_sections(
-            stack_id, route.extracted_entities
-        )
-
-        # Merge and deduplicate
-        return self._merge_and_rank_clauses(chroma_results, graph_sections, pg_clauses)
+        # PostgreSQL: batch lookup for all section numbers (pgvector + entities)
+        clauses = []
+        if section_numbers:
+            rows = await self.postgres.fetch(
+                "SELECT section_number, section_title, current_text, clause_category, "
+                "source_document_id, effective_date FROM clauses "
+                "WHERE section_number = ANY($1) AND contract_stack_id = $2 AND is_current = TRUE",
+                list(section_numbers), stack_id,
+            )
+            for row in rows:
+                clauses.append(CurrentClause(
+                    section_number=row["section_number"],
+                    section_title=row["section_title"] or "",
+                    current_text=row["current_text"] or "",
+                    clause_category=row["clause_category"] or "general",
+                    source_document_id=row["source_document_id"],
+                    source_document_label="",
+                ))
+        return clauses
 
     async def _extract_proposed_change(
         self, query_text: str, relevant_clauses: list[CurrentClause]

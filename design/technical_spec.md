@@ -48,12 +48,12 @@
 │  - Temporal      │   - Cross-Ref    │   - Risk            │
 └──────────────────┴──────────────────┴─────────────────────┘
                             ↓
-┌──────────────────────────────────┬─────────────────────────┐
-│  PostgreSQL (NeonDB)             │   ChromaDB              │
-│  - Structured data               │   - Vector embeddings   │
-│  - Clause dependency graph       │   - Semantic search     │
-│    (recursive CTEs)              │                         │
-└──────────────────────────────────┴─────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│  PostgreSQL + pgvector (NeonDB)                             │
+│  - Structured data + clause dependency graph (recursive CTEs)│
+│  - Vector embeddings (section_embeddings table, HNSW index) │
+│  - Semantic search via cosine distance (<=> operator)       │
+└─────────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────────┐
 │                  Claude API (Anthropic)                      │
@@ -73,12 +73,12 @@
 
 ### Databases
 - **Relational:** PostgreSQL 15+ via NeonDB (primary data store + clause dependency graph via recursive CTEs)
-- **Vector Store:** ChromaDB (local embeddings, semantic search)
+- **Vector Store:** pgvector on NeonDB (section_embeddings table, HNSW cosine index)
 - **Cache:** Redis (session state, query cache)
 
 ### AI/ML
 - **LLM API:** Anthropic Claude API (claude-opus-4.5, claude-sonnet-4.5)
-- **Embeddings:** Azure OpenAI text-embedding-3-large (via existing Azure creds in .env)
+- **Embeddings:** Gemini text-embedding-004 (768-dim, via GEMINI_API_KEY in .env)
 - **Document Processing:** PyMuPDF, pdfplumber, python-docx
 - **NLP:** spaCy (optional for entity extraction)
 
@@ -1597,7 +1597,7 @@ services:
       - redis
     volumes:
       - ./uploads:/app/uploads
-      - ./chroma_data:/app/chroma_data
+      # Vector embeddings stored in NeonDB via pgvector — no local volume needed
 
   frontend:
     build: ./frontend
@@ -1646,8 +1646,8 @@ AZURE_OPENAI_API_VERSION=2024-10-01-preview
 # Gemini
 GEMINI_API_KEY=...
 
-# ChromaDB (local, no API key needed)
-CHROMA_PERSIST_DIR=./chroma_data
+# Vector embeddings use pgvector on NeonDB (no separate vector DB needed)
+# Embedding model: Gemini text-embedding-004 (uses GEMINI_API_KEY above)
 
 # Application
 APP_ENV=development
@@ -1754,7 +1754,7 @@ async def test_full_pipeline():
 - [ ] Set up project structure
 - [ ] Configure Docker Compose
 - [ ] Create database schemas
-- [ ] Set up NeonDB (PostgreSQL), ChromaDB, Redis
+- [ ] Set up NeonDB (PostgreSQL + pgvector), Redis
 - [ ] Implement basic API structure (FastAPI)
 - [ ] Create React frontend skeleton
 

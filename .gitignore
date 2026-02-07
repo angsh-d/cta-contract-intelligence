@@ -19,9 +19,6 @@ tmp/
 # Archive
 .archive/
 
-# ChromaDB local data
-chroma_data/
-
 # Python
 *.pyo
 *.pyd

@@ -37,7 +37,7 @@ class AgentProcessingError(ContractIQError):
 
 
 class DatabaseError(ContractIQError):
-    """PostgreSQL (NeonDB), ChromaDB, or Redis operation failed."""
+    """PostgreSQL (NeonDB) or Redis operation failed."""
 
     def __init__(self, message: str, database: str, **kw):
         super().__init__(message, **kw)

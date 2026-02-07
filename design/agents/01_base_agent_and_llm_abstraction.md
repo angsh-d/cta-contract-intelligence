@@ -1270,7 +1270,7 @@ prompt/
 | **run() wraps process()** | `run()` adds verification and confidence-gated re-processing around the subclass `process()` implementation. Orchestrator calls `run()`; agents implement `process()`. |
 | **Self-verification hook** | `_verify_output()` lets each agent implement domain-specific output validation. Default is no-op — agents opt in. Catches LLM hallucinations before they propagate downstream. |
 | **Confidence-gated re-processing** | When confidence < `verification_threshold`, the agent self-critiques and re-runs. This prevents low-quality outputs from flowing into downstream agents unchecked. |
-| **Tool-use agentic loop** | `call_llm_with_tools()` implements a ReAct-style loop where agents can query databases, search ChromaDB, or look up specific clauses during reasoning — rather than pre-loading all context into the prompt. |
+| **Tool-use agentic loop** | `call_llm_with_tools()` implements a ReAct-style loop where agents can query databases, search pgvector, or look up specific clauses during reasoning — rather than pre-loading all context into the prompt. |
 | **Token estimation before calls** | `_check_token_budget()` prevents silent context window truncation. Raises `LLMProviderError` when estimated input exceeds model limits. |
 | **Auto-failover to fallback provider** | When primary provider exhausts retries, automatically attempts fallback. This is infrastructure resilience, not code fallback — the "never fall back" policy applies to workaround code, not provider redundancy. |
 | **TraceContext for observability** | Every LLM call records prompt hash, tokens, latency, and model. Enables cost tracking, prompt versioning, and debugging of incorrect outputs by replaying the exact call. |
