@@ -1,0 +1,35 @@
+Determine the current text of Section {section_number}.
+
+Original text (from original CTA):
+{original_text}
+Source: {original_source}
+
+Amendments to apply (in chronological order):
+{amendment_chain}
+
+Apply all amendments step by step and return:
+{{
+  "reasoning": "your step-by-step analysis...",
+  "current_text": "the final text after all amendments",
+  "clause_category": "payment|insurance|indemnification|data_retention|confidentiality|termination|general",
+  "source_chain": [
+    {{
+      "stage": "original",
+      "document_id": "...",
+      "document_label": "Original CTA",
+      "text": "original text",
+      "change_description": null,
+      "modification_type": null
+    }},
+    {{
+      "stage": "amendment_3",
+      "document_id": "...",
+      "document_label": "Amendment 3 (Aug 2023)",
+      "text": "text after this amendment",
+      "change_description": "Payment terms changed from Net 30 to Net 45",
+      "modification_type": "selective_override"
+    }}
+  ],
+  "confidence": 0.95,
+  "confidence_factors": {{"amendment_clarity": 0.9, "section_match": 0.8}}
+}}

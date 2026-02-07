@@ -1,0 +1,34 @@
+A change is proposed to Section {section_number}:
+  CURRENT: {current_text}
+  PROPOSED: {proposed_text}
+
+You are analyzing HOP {hop_number} impacts — clauses that are {hop_number} step(s) away in the dependency graph.
+
+Affected clauses at this hop:
+{hop_clauses}
+
+For each clause, determine if the proposed change materially affects it.
+
+Before producing your final answer, reason step-by-step about your analysis.
+Include your reasoning in the 'reasoning' field of the JSON output.
+
+Return JSON:
+{{
+  "reasoning": "your step-by-step analysis...",
+  "impacts": [
+    {{
+      "affected_section": "12.1",
+      "affected_section_title": "Indemnification",
+      "impact_type": "indemnification_gap",
+      "severity": "critical",
+      "description": "Indemnification covers 7 years but data retention would be 25 years, leaving 18 years unprotected",
+      "required_action": "Extend indemnification period to match data retention",
+      "estimated_cost_low": 150000,
+      "estimated_cost_high": 200000,
+      "estimated_cost_rationale": "Additional insurance premium for 18-year extended coverage",
+      "estimated_timeline": "3-4 weeks to negotiate"
+    }}
+  ]
+}}
+
+If NO clauses at this hop are materially affected, return: {{"reasoning": "...", "impacts": []}}

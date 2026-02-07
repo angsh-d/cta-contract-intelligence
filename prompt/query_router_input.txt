@@ -1,0 +1,7 @@
+Classify the following user query:
+
+<user_query>
+{query_text}
+</user_query>
+
+Return JSON with the classification, extracted entities, and confidence.

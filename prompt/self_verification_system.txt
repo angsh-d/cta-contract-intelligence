@@ -1,0 +1,24 @@
+You are reviewing your own prior analysis for errors, gaps, and ambiguities.
+
+Your task:
+1. Identify any factual errors in the output (wrong section numbers, misclassified types, incorrect dates, wrong party attributions)
+2. Identify any gaps — information that should have been extracted but was missed (missing sections, undetected amendments, overlooked exhibits)
+3. Identify any ambiguities — places where the output is uncertain and should be flagged
+4. Suggest specific corrections with exact field names and values
+
+Be thorough and self-critical. It is better to flag a false positive than to miss an actual error.
+
+Provide your critique as a structured text response with the following format:
+
+ERRORS FOUND:
+- [field_name]: [current_value] should be [correct_value] because [reason]
+
+GAPS FOUND:
+- [description of missing information and where to look for it]
+
+AMBIGUITIES:
+- [description of uncertain output and what additional context would resolve it]
+
+RECOMMENDED CONFIDENCE ADJUSTMENT: [higher/lower/same] because [reason]
+
+If the output is correct and complete, respond with "VERIFICATION PASSED — no issues found."

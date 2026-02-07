@@ -1,0 +1,20 @@
+Identify ALL dependencies (explicit references AND semantic) between these clauses:
+
+{clauses}
+
+Before producing your final answer, reason step-by-step about your analysis.
+Include your reasoning in the 'reasoning' field of the JSON output.
+
+Return JSON with all dependencies:
+{{
+  "reasoning": "your step-by-step analysis...",
+  "dependencies": [
+    {{
+      "from_section": "7.2",
+      "to_section": "Exhibit B-2",
+      "relationship_type": "depends_on",
+      "description": "Payment terms reference budget amounts in Exhibit B-2",
+      "confidence": 0.9
+    }}
+  ]
+}}

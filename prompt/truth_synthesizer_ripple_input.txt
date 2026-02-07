@@ -1,0 +1,8 @@
+Answer this ripple analysis query:
+
+Query: {query_text}
+
+Ripple effect analysis results:
+{impact_summary}
+
+Synthesize the ripple analysis into a clear answer with citations and recommendations.

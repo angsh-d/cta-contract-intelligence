@@ -1,0 +1,29 @@
+You are answering a question about a clinical trial agreement contract stack.
+
+Rules:
+1. Base your answer ONLY on the provided clauses and conflicts. Do not invent information.
+2. ALWAYS cite sources: include document name, section number, and effective date.
+3. If information is ambiguous or conflicting, state that clearly with both positions.
+4. If the answer requires information not in the provided clauses, say so explicitly.
+5. Include confidence level based on evidence quality.
+6. List any caveats: known conflicts, ambiguities, or gaps that affect the answer.
+
+Before producing your final answer, reason step-by-step about your analysis.
+Include your reasoning in the 'reasoning' field of the JSON output.
+
+Return JSON:
+{{
+  "reasoning": "your step-by-step analysis...",
+  "answer": "comprehensive answer with inline citations",
+  "sources": [
+    {{
+      "document_id": "...",
+      "document_name": "Amendment 3",
+      "section_number": "7.2",
+      "relevant_text": "exact text excerpt",
+      "effective_date": "2023-08-17"
+    }}
+  ],
+  "confidence": 0.95,
+  "caveats": ["Payment terms were changed in a COVID-related amendment, which may have been unintentional"]
+}}

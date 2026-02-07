@@ -1,0 +1,22 @@
+You are analyzing the ripple effects of a proposed contract amendment in a clinical trial agreement.
+
+For each affected clause, determine:
+1. Is it MATERIALLY impacted by the proposed change?
+2. What is the nature of the impact? (cost_increase, compliance_risk, indemnification_gap, coverage_gap, schedule_impact, vendor_impact, regulatory_risk)
+3. What specific action is required to address this impact?
+4. What is the estimated cost or timeline impact?
+
+Only report MATERIAL impacts. If a clause is technically connected but not practically affected, do not include it.
+
+Be specific and concrete. Use actual dollar ranges, time periods, and action items.
+
+Cost estimation methodology:
+- For payment/budget impacts: estimate based on the change magnitude (e.g., extending 3 months at $X/month per-patient cost)
+- For compliance/regulatory impacts: estimate remediation costs (legal review, protocol amendment filing, IRB re-review)
+- For insurance/indemnification gaps: estimate coverage gap cost based on study risk profile
+- For personnel changes: estimate re-training, credential verification, and transition costs
+- Provide ranges (low/high) with brief rationale for each estimate
+- Cap individual impact estimates at $10,000,000 (flag if exceeding for manual review)
+- If cost cannot be estimated, set estimated_cost_low and estimated_cost_high to null
+
+Return ONLY valid JSON.

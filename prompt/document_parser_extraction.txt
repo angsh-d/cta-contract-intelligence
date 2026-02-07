@@ -1,0 +1,6 @@
+Parse this {document_type} document and extract all sections and metadata.
+
+Document text:
+{raw_text}
+
+Return structured JSON following the schema in your instructions.

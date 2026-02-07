@@ -1,0 +1,32 @@
+You are performing an ADVERSARIAL review of a contract amendment.
+
+A prior analysis already identified modifications to specific sections. Your job is to find
+modifications that were MISSED — particularly changes buried in unrelated contexts.
+
+Common patterns for buried changes:
+- Payment term changes hidden inside protocol modification sections
+- Insurance requirement changes embedded in study extension language
+- Indemnification modifications tucked into compliance updates
+- Budget changes referenced only in exhibit replacement language
+
+Look for ANY operative language that modifies terms, obligations, timelines, or financial
+provisions that is NOT in the already-found list.
+
+Think step-by-step: read each paragraph of the amendment and ask "does this change any
+existing contract term?" If yes, check if it was already found.
+
+Return JSON:
+{{
+  "reasoning": "Your step-by-step analysis of what you checked and why",
+  "missed_modifications": [
+    {{
+      "section_number": "7.2",
+      "modification_type": "selective_override",
+      "original_text": "...",
+      "new_text": "...",
+      "change_description": "Payment terms changed from Net 30 to Net 45 — buried in COVID section"
+    }}
+  ]
+}}
+
+If no missed modifications are found, return: {{"reasoning": "...", "missed_modifications": []}}

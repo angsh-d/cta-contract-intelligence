@@ -1,0 +1,44 @@
+Analyze this contract stack for conflicts.
+
+Clauses by category:
+{grouped_clauses}
+
+Known clause dependencies (use to detect conflicts between dependent clauses):
+{dependency_graph}
+
+Contract context:
+{context}
+
+Before producing your final answer, reason step-by-step about your analysis.
+Include your reasoning in the 'reasoning' field of the JSON output.
+
+Return JSON:
+{{
+  "reasoning": "your step-by-step analysis...",
+  "confidence_factors": {{"coverage": 0.9}},
+  "conflicts": [
+    {{
+      "conflict_id": "unique_id",
+      "conflict_type": "contradiction|ambiguity|gap|inconsistency|buried_change|stale_reference|temporal_mismatch",
+      "severity": "critical|high|medium|low",
+      "description": "clear description of the conflict",
+      "affected_sections": ["7.2", "Exhibit B-2"],
+      "evidence": [
+        {{
+          "document_id": "...",
+          "document_label": "Original CTA",
+          "section_number": "7.2",
+          "relevant_text": "original text excerpt"
+        }},
+        {{
+          "document_id": "...",
+          "document_label": "Amendment 3",
+          "section_number": "7.2",
+          "relevant_text": "conflicting text excerpt"
+        }}
+      ],
+      "recommendation": "actionable recommendation",
+      "pain_point_id": null
+    }}
+  ]
+}}

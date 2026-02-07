@@ -1,0 +1,8 @@
+Proposed change to Section {section_number}:
+FROM: {current_text}
+TO: {proposed_text}
+
+All identified impacts:
+{impacts_json}
+
+Synthesize these impacts into prioritized recommendations.

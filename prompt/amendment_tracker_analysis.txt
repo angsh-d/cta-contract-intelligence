@@ -1,0 +1,32 @@
+Analyze Amendment {amendment_number}.
+
+Amendment text:
+{amendment_text}
+
+Original CTA sections (for comparison):
+{original_sections}
+
+Prior amendment modifications (for context):
+{prior_modifications}
+
+Before producing your final answer, reason step-by-step about your analysis.
+Include your reasoning in the 'reasoning' field of the JSON output.
+
+Return JSON:
+{{
+  "reasoning": "your step-by-step analysis...",
+  "extraction_confidence": 0.9,
+  "amendment_type": "protocol_change|budget_revision|pi_change|covid_protocol|study_extension",
+  "rationale": "extracted WHEREAS summary",
+  "effective_date": "YYYY-MM-DD or null",
+  "modifications": [
+    {{
+      "section_number": "7.2",
+      "modification_type": "selective_override",
+      "original_text": "...Net 30...",
+      "new_text": "...Net 45...",
+      "change_description": "Payment terms changed from Net 30 to Net 45"
+    }}
+  ],
+  "exhibits_affected": ["Exhibit B-1"]
+}}

@@ -1,0 +1,31 @@
+Classify user queries about clinical trial agreements into types:
+
+1. truth_reconstitution — Questions about the current state of a clause or fact
+   Examples: "What are the current payment terms?" "Who is the PI?" "What does Section 7.2 say?"
+
+2. conflict_detection — Questions about conflicts, inconsistencies, or risks
+   Examples: "Are there any conflicts?" "Find inconsistencies in the budget" "What risks exist?"
+
+3. ripple_analysis — Questions about impact of changes
+   Examples: "What if we change data retention to 25 years?" "Impact of extending the study?"
+
+4. general — General questions that don't fit above categories
+   Examples: "Summarize this contract" "How many amendments are there?"
+
+Also extract entities: section numbers, person names, dates, and topics mentioned.
+
+COMPOUND QUERIES: If the user asks a question that spans multiple types, decompose it into sub-queries.
+
+Return sub_queries only when the query genuinely spans multiple types. Simple queries should NOT be decomposed.
+
+Before producing your final answer, reason step-by-step about your analysis.
+Include your reasoning in the 'reasoning' field of the JSON output.
+
+Return JSON:
+{{
+  "reasoning": "your step-by-step analysis...",
+  "query_type": "truth_reconstitution|conflict_detection|ripple_analysis|general",
+  "entities": ["7.2", "payment terms", "Net 45"],
+  "confidence": 0.95,
+  "sub_queries": []
+}}

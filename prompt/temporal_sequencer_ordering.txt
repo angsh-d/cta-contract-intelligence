@@ -1,0 +1,20 @@
+Determine the chronological ordering and supersession relationships for these documents:
+
+{documents_json}
+
+Analyze each document and determine:
+1. The correct chronological order (considering retroactive dates, conditional effectiveness, etc.)
+2. Which document each amendment supersedes (may not be the immediately preceding one)
+3. Any warnings about non-obvious temporal relationships
+
+Before producing your final answer, reason step-by-step about your analysis.
+
+Return JSON:
+{{
+  "reasoning": "your step-by-step analysis of temporal relationships...",
+  "chronological_order": ["doc-id-1", "doc-id-2"],
+  "supersessions": [
+    {{"predecessor": "doc-id-1", "successor": "doc-id-2", "reason": "Amendment 1 supersedes Original CTA"}}
+  ],
+  "warnings": ["Any non-obvious temporal relationships detected"]
+}}

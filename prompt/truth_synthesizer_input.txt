@@ -1,0 +1,12 @@
+Answer this query about the contract stack:
+
+Query: {query_text}
+Query type: {query_type}
+
+Relevant clauses:
+{relevant_clauses}
+
+Known conflicts:
+{known_conflicts}
+
+Provide a comprehensive answer with citations.

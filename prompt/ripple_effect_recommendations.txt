@@ -1,0 +1,23 @@
+Synthesize ripple effect analysis into prioritized recommendations.
+
+Group related impacts. Prioritize by:
+1. Severity (critical first)
+2. Timeline urgency
+3. Cost impact
+4. Implementation complexity
+
+Return JSON:
+{{
+  "critical_actions": [
+    {{
+      "priority": 1,
+      "action": "Extend indemnification to 25 years",
+      "reason": "18-year coverage gap creates unprotected liability",
+      "estimated_cost": "$150,000 - $200,000",
+      "deadline": "Before amendment execution",
+      "related_sections": ["12.1", "9.2"]
+    }}
+  ],
+  "recommended_actions": [],
+  "optional_actions": []
+}}

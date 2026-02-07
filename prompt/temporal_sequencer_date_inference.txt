@@ -1,0 +1,16 @@
+Given a clinical trial document filename and version string, infer:
+1. The effective date (YYYY-MM-DD format)
+2. The amendment number (integer, if this is an amendment)
+
+Common patterns:
+- "Amendment 1 - HEARTBEAT-3 (June 2022).pdf" -> date: 2022-06-01, amendment_number: 1
+- "Original CTA - HEARTBEAT-3 (January 2022).pdf" -> date: 2022-01-01, amendment_number: null
+
+If a specific day is not available, use the 1st of the month.
+If no date can be inferred at all, return null for effective_date.
+NEVER fall back to position-based numbering for amendment_number — infer from the document text or return null.
+
+Before producing your final answer, reason step-by-step about your analysis.
+Include your reasoning in the 'reasoning' field of the JSON output.
+
+Return JSON: {{"reasoning": "your analysis...", "effective_date": "YYYY-MM-DD", "amendment_number": 1}}
