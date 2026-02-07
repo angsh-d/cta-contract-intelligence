@@ -75,15 +75,23 @@ alembic upgrade head
 - `POST /api/v1/contract-stacks/{id}/analyze/conflicts` - Detect conflicts
 
 ## Frontend Design
-- Apple-inspired UI: SF Pro fonts, #1d1d1f text, #f5f5f7 backgrounds, glass morphism
+- Pure greyscale Apple-inspired UI: SF Pro fonts, #1d1d1f text, #f5f5f7 backgrounds, glass morphism
+- NO colors allowed — blacks, greys, whites only throughout all pages
 - Responsive sidebar navigation with mobile drawer
-- Framer Motion page transitions and stagger animations
-- Segmented tab control on contract detail page
-- Chat-style AI query interface with sources display
+- Framer Motion page transitions, stagger animations, spring-based tab indicators
+- 5-tab segmented control on contract detail (Overview, Timeline, Query, Conflicts, Ripple Effects)
+- Apple Messages-style AI chat interface with suggested queries, typing indicator, source citations
+- Dashboard with 9-agent architecture preview (3 tiers: Ingestion, Reasoning, Analysis)
+- Landing page with animated agent pipeline visualization and stat counters
+- Premium contract cards with therapeutic area badges and status pills
+- Vertical timeline with dark CTA root node and amendment chain
+- Conflict detection with severity-based cards and graduated border indicators
+- Ripple effect analysis with section/current/proposed text inputs
 
 ## User Preferences
-- Apple-inspired, best-in-class UX design
+- Apple-inspired, best-in-class UX design — PURE GREYSCALE ONLY
 - Clean, minimal interface virtually indistinguishable from Apple products
+- No colors (blue, green, orange, red) — only blacks, greys, whites
 
 ## Recent Changes
 - 2026-02-07: Initial Replit setup - configured PostgreSQL, ran migrations
@@ -91,3 +99,8 @@ alembic upgrade head
 - 2026-02-07: Fixed DB connection to prefer DATABASE_URL over EXTERNAL_DATABASE_URL
 - 2026-02-07: Combined backend+frontend into single workflow
 - 2026-02-07: Deployment configured for autoscale with frontend build step
+- 2026-02-07: Major UX overhaul — StackDetail with 5 premium tabs (cinematic metrics, timeline, Messages-style chat, conflict cards, ripple effects)
+- 2026-02-07: Dashboard redesigned as clinical operations command center with 9-agent architecture preview
+- 2026-02-07: StacksList enhanced with premium cards, therapeutic area badges, stagger animations
+- 2026-02-07: Landing page enhanced with animated agent pipeline and stat counters
+- 2026-02-07: Fixed StacksList animation bug (data loading after mount)
