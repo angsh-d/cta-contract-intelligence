@@ -26,7 +26,7 @@ outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "cd backend && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload & cd frontend && npm run dev"
+args = "bash -c \"cd /home/runner/workspace/backend && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload & sleep 2 && cd /home/runner/workspace/frontend && npx vite --host 0.0.0.0 --port 5000\""
 waitForPort = 5000
 
 [[ports]]
