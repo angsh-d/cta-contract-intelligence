@@ -40,7 +40,7 @@ class RippleEffectAnalyzerAgent(BaseAgent):
                 row = await conn.fetchrow(
                     "SELECT section_number, section_title, current_text, clause_category "
                     "FROM clauses WHERE section_number = $1 AND contract_stack_id = $2",
-                    tool_input["section_number"], str(self._current_stack_id),
+                    tool_input["section_number"], self._current_stack_id,
                 )
                 return dict(row) if row else {"error": "Clause not found"}
             elif tool_name == "get_dependencies":
@@ -49,7 +49,7 @@ class RippleEffectAnalyzerAgent(BaseAgent):
                     "FROM clause_dependencies cd "
                     "JOIN clauses c ON c.id = cd.from_clause_id "
                     "WHERE c.section_number = $1 AND cd.contract_stack_id = $2",
-                    tool_input["section_number"], str(self._current_stack_id),
+                    tool_input["section_number"], self._current_stack_id,
                 )
                 return [dict(r) for r in rows]
             elif tool_name == "get_amendment_history":
@@ -57,7 +57,7 @@ class RippleEffectAnalyzerAgent(BaseAgent):
                     "SELECT a.amendment_number, a.modification_type, a.rationale "
                     "FROM amendments a "
                     "WHERE a.contract_stack_id = $1 ORDER BY a.amendment_number",
-                    str(self._current_stack_id),
+                    self._current_stack_id,
                 )
                 return [dict(r) for r in rows]
         return await super()._execute_tool(tool_name, tool_input)

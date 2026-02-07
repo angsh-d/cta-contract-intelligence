@@ -68,6 +68,7 @@ class DocumentParseInput(BaseModel):
     """Input to DocumentParserAgent.process()."""
     model_config = ConfigDict(frozen=True)
 
+    document_id: UUID
     file_path: str
     document_type: DocumentType
     contract_stack_id: UUID
@@ -79,11 +80,11 @@ class DocumentParseOutput(BaseModel):
     metadata: Optional[DocumentMetadata] = None
     sections: list[ParsedSection]
     tables: list[ParsedTable]
-    raw_text: str
-    char_count: int
-    page_count: int
-    extraction_model: str
-    extraction_latency_ms: int
+    raw_text: str = ""
+    char_count: int = 0
+    page_count: int = 0
+    extraction_model: str = ""
+    extraction_latency_ms: int = 0
     llm_reasoning: str = ""
     extraction_confidence: float = Field(ge=0.0, le=1.0, default=0.9)
 
@@ -117,10 +118,10 @@ class AmendmentTrackOutput(BaseModel):
     amendment_document_id: UUID
     amendment_number: int
     effective_date: Optional[date] = None
-    amendment_type: str
-    rationale: str
-    modifications: list[Modification]
-    sections_modified: list[str]
+    amendment_type: str = "unknown"
+    rationale: str = ""
+    modifications: list[Modification] = Field(default_factory=list)
+    sections_modified: list[str] = Field(default_factory=list)
     exhibits_affected: list[str] = Field(default_factory=list)
     llm_reasoning: str = ""
     extraction_confidence: float = Field(ge=0.0, le=1.0, default=0.9)
@@ -199,24 +200,24 @@ class TemporalSequenceOutput(BaseModel):
 
 class SourceChainLink(BaseModel):
     """One step in the provenance chain showing how a clause evolved."""
-    stage: str
-    document_id: UUID
-    document_label: str
-    text: str
+    stage: str = ""
+    document_id: str = ""  # LLM returns labels like "CTA_2021", not UUIDs
+    document_label: str = ""
+    text: str = ""
     change_description: Optional[str] = None
-    modification_type: Optional[ModificationType] = None
+    modification_type: Optional[str] = None  # LLM may return non-enum values
 
 
 class ClauseVersion(BaseModel):
     """The resolved current state of a single clause."""
     section_number: str
-    section_title: str
-    current_text: str
-    source_chain: list[SourceChainLink]
-    last_modified_by: UUID
+    section_title: str = ""
+    current_text: str = ""
+    source_chain: list[SourceChainLink] = Field(default_factory=list)
+    last_modified_by: Optional[UUID] = None
     last_modified_date: Optional[date] = None
-    confidence: float = Field(ge=0.0, le=1.0)
-    clause_category: str
+    confidence: float = Field(ge=0.0, le=1.0, default=0.8)
+    clause_category: str = "general"
 
 
 class AmendmentForSection(BaseModel):
@@ -251,11 +252,11 @@ class OverrideResolutionOutput(BaseModel):
 class CurrentClause(BaseModel):
     """A clause in its current resolved state, ready for conflict analysis."""
     section_number: str
-    section_title: str
-    current_text: str
-    clause_category: str
-    source_document_id: UUID
-    source_document_label: str
+    section_title: str = ""
+    current_text: str = ""
+    clause_category: str = "general"
+    source_document_id: Optional[UUID] = None
+    source_document_label: str = ""
     effective_date: Optional[date] = None
 
 
@@ -272,21 +273,21 @@ class ContractStackContext(BaseModel):
 
 class ConflictEvidence(BaseModel):
     """Evidence supporting a detected conflict."""
-    document_id: UUID
-    document_label: str
-    section_number: str
-    relevant_text: str
+    document_id: str = ""  # LLM returns labels, not UUIDs
+    document_label: str = ""
+    section_number: str = ""
+    relevant_text: str = ""
 
 
 class DetectedConflict(BaseModel):
     """A single conflict found in the contract stack."""
-    conflict_id: str
-    conflict_type: ConflictType
-    severity: ConflictSeverity
-    description: str
-    affected_sections: list[str]
-    evidence: list[ConflictEvidence] = Field(min_length=2)
-    recommendation: str
+    conflict_id: str = ""
+    conflict_type: ConflictType = ConflictType.CONTRADICTION
+    severity: ConflictSeverity = ConflictSeverity.MEDIUM
+    description: str = ""
+    affected_sections: list[str] = Field(default_factory=list)
+    evidence: list[ConflictEvidence] = Field(default_factory=list)
+    recommendation: str = ""
     pain_point_id: Optional[int] = None
 
 
@@ -334,8 +335,8 @@ class ClauseDependency(BaseModel):
     """A single dependency between two clauses."""
     from_section: str
     to_section: str
-    relationship_type: RelationshipType
-    description: str
+    relationship_type: str = "references"  # LLM may return non-enum values
+    description: str = ""
     detection_method: str = "llm"
     confidence: float = Field(ge=0.0, le=1.0, default=1.0)
 

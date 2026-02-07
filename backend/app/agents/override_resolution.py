@@ -18,7 +18,7 @@ class OverrideResolutionAgent(BaseAgent):
     """For each clause, apply all amendments in order to determine current text with provenance."""
 
     async def process(self, input_data: OverrideResolutionInput) -> OverrideResolutionOutput:
-        amendments = sorted(input_data.amendments, key=lambda a: a.effective_date)
+        amendments = sorted(input_data.amendments, key=lambda a: a.effective_date or date.min)
 
         system_prompt = self.prompts.get("override_resolution_system")
         user_prompt = self.prompts.get(
@@ -32,11 +32,19 @@ class OverrideResolutionAgent(BaseAgent):
         result = await self.call_llm(system_prompt, user_prompt)
 
         current_text = result.get("current_text")
-        if not current_text:
-            raise LLMResponseError(f"OverrideResolutionAgent: missing 'current_text' for section {input_data.section_number}")
+        if current_text is None:
+            current_text = input_data.original_clause.text  # Fall back to original
 
-        source_chain_raw = result.get("source_chain", [])
-        source_chain = [SourceChainLink(**link) for link in source_chain_raw]
+        source_chain_raw = result.get("source_chain") or []
+        source_chain = []
+        for link in source_chain_raw:
+            if isinstance(link, dict):
+                try:
+                    source_chain.append(SourceChainLink(**link))
+                except Exception as e:
+                    logger.warning("Skipping invalid source chain link: %s", e)
+            elif isinstance(link, str):
+                source_chain.append(SourceChainLink(stage="unknown", document_label=link, text=link))
 
         if amendments:
             last_modified_by = amendments[-1].amendment_document_id

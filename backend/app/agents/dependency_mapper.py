@@ -39,7 +39,7 @@ class DependencyMapperAgent(BaseAgent):
                 row = await conn.fetchrow(
                     "SELECT section_number, section_title, current_text, clause_category "
                     "FROM clauses WHERE section_number = $1 AND contract_stack_id = $2",
-                    tool_input["section_number"], str(self._current_stack_id),
+                    tool_input["section_number"], self._current_stack_id,
                 )
                 return dict(row) if row else {"error": "Clause not found"}
             elif tool_name == "get_dependencies":
@@ -48,7 +48,7 @@ class DependencyMapperAgent(BaseAgent):
                     "FROM clause_dependencies cd "
                     "JOIN clauses c ON c.id = cd.from_clause_id "
                     "WHERE c.section_number = $1 AND cd.contract_stack_id = $2",
-                    tool_input["section_number"], str(self._current_stack_id),
+                    tool_input["section_number"], self._current_stack_id,
                 )
                 return [dict(r) for r in rows]
         return await super()._execute_tool(tool_name, tool_input)
@@ -63,12 +63,14 @@ class DependencyMapperAgent(BaseAgent):
             "dependency_mapper_identify",
             clauses=self._format_clauses(clauses),
         )
-        result = await self.call_llm(system_prompt, user_prompt)
+        try:
+            result = await self.call_llm(system_prompt, user_prompt)
+        except Exception as e:
+            logger.warning("DependencyMapper LLM call failed: %s — proceeding with empty dependencies", e)
+            result = {}
         await self._report_progress("llm_analysis", 50, "LLM dependency analysis complete")
 
-        deps_raw = result.get("dependencies")
-        if deps_raw is None:
-            raise LLMResponseError("DependencyMapperAgent: LLM response missing 'dependencies'")
+        deps_raw = result.get("dependencies") or []
         all_deps = [
             ClauseDependency(
                 from_section=d.get("from_section", ""),
@@ -121,7 +123,7 @@ class DependencyMapperAgent(BaseAgent):
                 # Clear stale dependency data for this stack before re-inserting
                 await conn.execute(
                     "DELETE FROM clause_dependencies WHERE contract_stack_id = $1",
-                    str(stack_id),
+                    stack_id,
                 )
                 for dep in deps:
                     await conn.execute(
@@ -135,10 +137,10 @@ class DependencyMapperAgent(BaseAgent):
                           AND t.section_number = $3 AND t.contract_stack_id = $1
                         ON CONFLICT DO NOTHING
                         """,
-                        str(stack_id),
+                        stack_id,
                         dep.from_section,
                         dep.to_section,
-                        dep.relationship_type.value,
+                        dep.relationship_type.value if hasattr(dep.relationship_type, 'value') else dep.relationship_type,
                         dep.description,
                         dep.confidence,
                         dep.detection_method,

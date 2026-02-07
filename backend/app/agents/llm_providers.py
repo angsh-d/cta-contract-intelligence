@@ -2,10 +2,13 @@
 
 import asyncio
 import json
+import logging
 import time
 from typing import Protocol, Optional, Any, runtime_checkable
 
 from app.models.agent_schemas import LLMResponse
+
+logger = logging.getLogger(__name__)
 
 
 @runtime_checkable
@@ -80,6 +83,11 @@ class ClaudeProvider:
         )
         latency_ms = int((time.monotonic() - start) * 1000)
         content = response.content[0].text if response.content else ""
+        if not content:
+            logger.warning(
+                "Empty Claude response: stop_reason=%s model=%s content_blocks=%d",
+                response.stop_reason, model, len(response.content) if response.content else 0,
+            )
         return LLMResponse(
             success=True,
             content=content,
@@ -299,6 +307,7 @@ class GeminiProvider:
     provider_name: str = "gemini"
 
     MODEL_MAX_TOKENS: dict[str, int] = {
+        "gemini-3-pro-preview": 65536,
         "gemini-2.5-flash-lite": 65536,
         "gemini-2.5-pro": 65536,
         "gemini-2.0-flash-exp": 8192,
@@ -327,8 +336,8 @@ class GeminiProvider:
         model=None, max_output_tokens=None, temperature=0.0, response_format=None,
     ) -> LLMResponse:
         client = await self._get_client()
-        model_name = model or "gemini-2.5-flash-lite"
-        max_output_tokens = max_output_tokens or self.MODEL_MAX_TOKENS.get(model_name, 8192)
+        model_name = model or "gemini-3-pro-preview"
+        max_output_tokens = max_output_tokens or self.MODEL_MAX_TOKENS.get(model_name, 65536)
         start = time.monotonic()
         from google.genai import types
         config = types.GenerateContentConfig(
@@ -361,8 +370,8 @@ class GeminiProvider:
         model=None, max_output_tokens=None, temperature=0.0,
     ) -> LLMResponse:
         client = await self._get_client()
-        model_name = model or "gemini-2.5-flash-lite"
-        max_output_tokens = max_output_tokens or self.MODEL_MAX_TOKENS.get(model_name, 8192)
+        model_name = model or "gemini-3-pro-preview"
+        max_output_tokens = max_output_tokens or self.MODEL_MAX_TOKENS.get(model_name, 65536)
         start = time.monotonic()
 
         from google.genai import types

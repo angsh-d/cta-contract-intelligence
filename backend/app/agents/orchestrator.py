@@ -25,7 +25,7 @@ from app.agents.query_router import QueryRouter
 from app.agents.truth_synthesizer import TruthSynthesizer
 from app.exceptions import PipelineError
 from app.models.agent_schemas import (
-    AmendmentTrackInput, AmendmentTrackOutput,
+    AmendmentTrackInput, AmendmentTrackOutput, ClauseDependency,
     ConflictDetectionInput, ContractStackContext,
     CurrentClause, DependencyMapInput,
     DocumentParseInput, DocumentParseOutput, DocumentSummary,
@@ -136,7 +136,7 @@ class AgentOrchestrator:
         )
         self.agents["amendment_tracker"] = AmendmentTrackerAgent(
             config=AgentConfig(agent_name="amendment_tracker", llm_role="complex_reasoning",
-                               model_override="claude-opus-4-5-20250514", max_output_tokens=8192,
+                               model_override="claude-sonnet-4-5-20250929", max_output_tokens=8192,
                                timeout_seconds=180, verification_threshold=0.75),
             llm_provider=factory.get_for_role("complex_reasoning"),
             prompt_loader=prompt_loader,
@@ -157,7 +157,7 @@ class AgentOrchestrator:
         # Tier 2
         self.agents["override_resolution"] = OverrideResolutionAgent(
             config=AgentConfig(agent_name="override_resolution", llm_role="complex_reasoning",
-                               model_override="claude-opus-4-5-20250514", max_output_tokens=8192,
+                               model_override="claude-sonnet-4-5-20250929", max_output_tokens=8192,
                                timeout_seconds=180, verification_threshold=0.75),
             llm_provider=factory.get_for_role("complex_reasoning"),
             prompt_loader=prompt_loader,
@@ -166,7 +166,7 @@ class AgentOrchestrator:
         )
         self.agents["conflict_detection"] = ConflictDetectionAgent(
             config=AgentConfig(agent_name="conflict_detection", llm_role="complex_reasoning",
-                               model_override="claude-opus-4-5-20250514", max_output_tokens=8192,
+                               model_override="claude-sonnet-4-5-20250929", max_output_tokens=8192,
                                timeout_seconds=300, temperature=0.2, verification_threshold=0.70),
             llm_provider=factory.get_for_role("complex_reasoning"),
             prompt_loader=prompt_loader,
@@ -176,7 +176,7 @@ class AgentOrchestrator:
         )
         self.agents["dependency_mapper"] = DependencyMapperAgent(
             config=AgentConfig(agent_name="dependency_mapper", llm_role="complex_reasoning",
-                               model_override="claude-opus-4-5-20250514", max_output_tokens=8192,
+                               model_override="claude-sonnet-4-5-20250929", max_output_tokens=8192,
                                temperature=0.1, verification_threshold=0.75),
             llm_provider=factory.get_for_role("complex_reasoning"),
             prompt_loader=prompt_loader,
@@ -188,7 +188,7 @@ class AgentOrchestrator:
         # Tier 3
         self.agents["ripple_effect"] = RippleEffectAnalyzerAgent(
             config=AgentConfig(agent_name="ripple_effect", llm_role="complex_reasoning",
-                               model_override="claude-opus-4-5-20250514", max_output_tokens=8192,
+                               model_override="claude-sonnet-4-5-20250929", max_output_tokens=8192,
                                timeout_seconds=300, temperature=0.2, verification_threshold=0.70),
             llm_provider=factory.get_for_role("complex_reasoning"),
             prompt_loader=prompt_loader,
@@ -209,7 +209,7 @@ class AgentOrchestrator:
         )
         self.agents["truth_synthesizer"] = TruthSynthesizer(
             config=AgentConfig(agent_name="truth_synthesizer", llm_role="synthesis",
-                               model_override="claude-opus-4-5-20250514", max_output_tokens=8192,
+                               model_override="claude-sonnet-4-5-20250929", max_output_tokens=8192,
                                temperature=0.1, verification_threshold=0.80),
             llm_provider=factory.get_for_role("synthesis"),
             prompt_loader=prompt_loader,
@@ -220,6 +220,139 @@ class AgentOrchestrator:
     def get_agent(self, name: str) -> BaseAgent:
         return self.agents[name]
 
+    # ── Checkpoint Helpers ──────────────────────────────────────
+
+    async def _check_stage_complete(self, stack_id: UUID, stage: str) -> bool:
+        """Check if a pipeline stage already has results in the DB."""
+        if stage == "document_parsing":
+            count = await self.postgres.fetchval(
+                "SELECT COUNT(*) FROM documents WHERE contract_stack_id = $1 AND processed = TRUE", stack_id,
+            )
+            total = await self.postgres.fetchval(
+                "SELECT COUNT(*) FROM documents WHERE contract_stack_id = $1", stack_id,
+            )
+            return count > 0 and count == total
+        elif stage == "amendment_tracking":
+            return await self.postgres.fetchval(
+                "SELECT COUNT(*) FROM amendments WHERE contract_stack_id = $1", stack_id,
+            ) > 0
+        elif stage == "temporal_sequencing":
+            return await self.postgres.fetchval(
+                "SELECT COUNT(*) FROM document_supersessions WHERE contract_stack_id = $1", stack_id,
+            ) > 0
+        elif stage == "override_resolution":
+            return await self.postgres.fetchval(
+                "SELECT COUNT(*) FROM clauses WHERE contract_stack_id = $1 AND is_current = TRUE", stack_id,
+            ) > 0
+        elif stage == "dependency_mapping":
+            return await self.postgres.fetchval(
+                "SELECT COUNT(*) FROM clause_dependencies WHERE contract_stack_id = $1", stack_id,
+            ) > 0
+        elif stage == "conflict_detection":
+            return await self.postgres.fetchval(
+                "SELECT COUNT(*) FROM conflicts WHERE contract_stack_id = $1", stack_id,
+            ) > 0
+        return False
+
+    async def _load_parsed_outputs_from_db(self, stack_id: UUID, documents: list[dict]) -> list[DocumentParseOutput]:
+        """Reconstruct DocumentParseOutput objects from DB for checkpoint resume."""
+        from app.models.agent_schemas import DocumentMetadata, ParsedSection
+        outputs = []
+        for doc in documents:
+            meta_raw = await self.postgres.fetchval(
+                "SELECT metadata FROM documents WHERE id = $1", doc["id"],
+            )
+            metadata = None
+            if meta_raw:
+                meta_dict = json.loads(meta_raw) if isinstance(meta_raw, str) else meta_raw
+                metadata = DocumentMetadata(**meta_dict)
+            # Reconstruct sections from clauses for this document
+            rows = await self.postgres.fetch(
+                "SELECT section_number, section_title, clause_text, clause_category "
+                "FROM clauses WHERE source_document_id = $1 AND contract_stack_id = $2",
+                doc["id"], stack_id,
+            )
+            sections = []
+            if rows:
+                for r in rows:
+                    sections.append(ParsedSection(
+                        section_number=r["section_number"] or "",
+                        section_title=r["section_title"] or "",
+                        text=r["clause_text"] or "",
+                        clause_category=r["clause_category"] or "general",
+                    ))
+            else:
+                # If no clauses yet (stages 1-2 done but not 4), use chroma as fallback
+                chroma_results = self.chroma.get(
+                    where={"document_id": str(doc["id"])},
+                )
+                if chroma_results and chroma_results.get("metadatas"):
+                    for i, meta in enumerate(chroma_results["metadatas"]):
+                        sections.append(ParsedSection(
+                            section_number=meta.get("section_number", ""),
+                            section_title=meta.get("section_title", ""),
+                            text=chroma_results["documents"][i] if chroma_results.get("documents") else "",
+                            clause_category=meta.get("clause_category", "general"),
+                        ))
+            outputs.append(DocumentParseOutput(
+                document_id=doc["id"],
+                metadata=metadata,
+                sections=sections,
+                tables=[],
+                raw_text="",
+                page_count=0,
+            ))
+        return outputs
+
+    async def _load_tracking_from_db(self, stack_id: UUID) -> list[AmendmentTrackOutput]:
+        """Load amendment tracking results from DB."""
+        from app.models.agent_schemas import Modification
+        rows = await self.postgres.fetch(
+            "SELECT document_id, amendment_number, amendment_type, sections_modified, "
+            "rationale, modifications FROM amendments WHERE contract_stack_id = $1 "
+            "ORDER BY amendment_number",
+            stack_id,
+        )
+        results = []
+        for r in rows:
+            mods_raw = json.loads(r["modifications"]) if r["modifications"] else []
+            mods = []
+            for m in mods_raw:
+                try:
+                    mods.append(Modification(**m))
+                except Exception:
+                    continue
+            results.append(AmendmentTrackOutput(
+                amendment_document_id=r["document_id"],
+                amendment_number=r["amendment_number"] or 0,
+                amendment_type=r["amendment_type"] or "unknown",
+                rationale=r["rationale"] or "",
+                modifications=mods,
+                sections_modified=r["sections_modified"] or [],
+            ))
+        return results
+
+    async def _load_resolved_clauses_from_db(self, stack_id: UUID) -> list[CurrentClause]:
+        """Load current clauses from DB for downstream stages."""
+        rows = await self.postgres.fetch(
+            "SELECT section_number, section_title, current_text, clause_category, "
+            "source_document_id, effective_date FROM clauses "
+            "WHERE contract_stack_id = $1 AND is_current = TRUE",
+            stack_id,
+        )
+        return [
+            CurrentClause(
+                section_number=r["section_number"],
+                section_title=r["section_title"] or "",
+                current_text=r["current_text"] or "",
+                clause_category=r["clause_category"] or "general",
+                source_document_id=r["source_document_id"],
+                source_document_label="",
+                effective_date=r["effective_date"],
+            )
+            for r in rows
+        ]
+
     # ── Ingestion Pipeline ─────────────────────────────────────
 
     async def process_contract_stack(
@@ -228,7 +361,7 @@ class AgentOrchestrator:
         job_id: str,
         progress_callback: Callable[[PipelineProgressEvent], Awaitable[None]],
     ) -> dict:
-        """Full 6-stage ingestion pipeline."""
+        """Full 6-stage ingestion pipeline with checkpoint resume."""
         await self.cache.invalidate_for_stack(contract_stack_id)
         trace = TraceContext(job_id=job_id)
         for agent in self.agents.values():
@@ -243,74 +376,95 @@ class AgentOrchestrator:
         documents = await self._get_documents(contract_stack_id)
 
         # ── Stage 1: Parse all documents (parallel) ──────────
-        await progress_callback(PipelineProgressEvent(
-            job_id=job_id, pipeline_stage="document_parsing", overall_percent=0,
-            message=f"Parsing {len(documents)} documents...",
-            current_agent="document_parser", timestamp=datetime.utcnow(),
-        ))
-
-        parser = self.get_agent("document_parser")
-        parse_tasks = [
-            parser.run(DocumentParseInput(
-                file_path=doc["file_path"],
-                document_type=DocumentType(doc["document_type"]),
-                contract_stack_id=contract_stack_id,
+        stage1_done = await self._check_stage_complete(contract_stack_id, "document_parsing")
+        if stage1_done:
+            logger.info("Stage 1 (document_parsing) — checkpoint found, skipping")
+            await progress_callback(PipelineProgressEvent(
+                job_id=job_id, pipeline_stage="document_parsing", overall_percent=30,
+                message=f"Skipped parsing — {len(documents)} documents already parsed (checkpoint)",
+                current_agent="document_parser", timestamp=datetime.utcnow(),
             ))
-            for doc in documents
-        ]
-        parse_results = await asyncio.gather(*parse_tasks, return_exceptions=True)
+            parsed_outputs = await self._load_parsed_outputs_from_db(contract_stack_id, documents)
+        else:
+            await progress_callback(PipelineProgressEvent(
+                job_id=job_id, pipeline_stage="document_parsing", overall_percent=0,
+                message=f"Parsing {len(documents)} documents...",
+                current_agent="document_parser", timestamp=datetime.utcnow(),
+            ))
 
-        parsed_outputs: list[DocumentParseOutput] = []
-        for i, result in enumerate(parse_results):
-            if isinstance(result, Exception):
-                raise PipelineError(
-                    f"Document parsing failed for {documents[i]['file_path']}: {result}",
-                    stage="document_parsing",
-                )
-            parsed_outputs.append(result)
+            parser = self.get_agent("document_parser")
+            parse_tasks = [
+                parser.run(DocumentParseInput(
+                    document_id=doc["id"],
+                    file_path=doc["file_path"],
+                    document_type=DocumentType(doc["document_type"]),
+                    contract_stack_id=contract_stack_id,
+                ))
+                for doc in documents
+            ]
+            parse_results = await asyncio.gather(*parse_tasks, return_exceptions=True)
 
-        await progress_callback(PipelineProgressEvent(
-            job_id=job_id, pipeline_stage="document_parsing", overall_percent=30,
-            message=f"Parsed {len(parsed_outputs)} documents",
-            current_agent="document_parser", timestamp=datetime.utcnow(),
-        ))
-        await self._save_parsed_documents(contract_stack_id, parsed_outputs)
+            parsed_outputs: list[DocumentParseOutput] = []
+            for i, result in enumerate(parse_results):
+                if isinstance(result, Exception):
+                    raise PipelineError(
+                        f"Document parsing failed for {documents[i]['file_path']}: {result}",
+                        stage="document_parsing",
+                    )
+                parsed_outputs.append(result)
+
+            await progress_callback(PipelineProgressEvent(
+                job_id=job_id, pipeline_stage="document_parsing", overall_percent=30,
+                message=f"Parsed {len(parsed_outputs)} documents",
+                current_agent="document_parser", timestamp=datetime.utcnow(),
+            ))
+            await self._save_parsed_documents(contract_stack_id, parsed_outputs)
 
         # ── Stage 2: Track amendments (sequential) ───────────
-        tracker = self.get_agent("amendment_tracker")
         cta_output = next((p for p in parsed_outputs if p.metadata and p.metadata.document_type == DocumentType.CTA), None)
         if not cta_output:
             raise PipelineError("No CTA document found in parsed outputs", stage="amendment_tracking")
 
-        amendment_outputs = [p for p in parsed_outputs if p.metadata and p.metadata.document_type == DocumentType.AMENDMENT]
-        amendment_outputs.sort(key=lambda p: p.metadata.effective_date or "")
-
-        tracking_results: list[AmendmentTrackOutput] = []
-        for i, amend_output in enumerate(amendment_outputs):
+        stage2_done = await self._check_stage_complete(contract_stack_id, "amendment_tracking")
+        if stage2_done:
+            logger.info("Stage 2 (amendment_tracking) — checkpoint found, skipping")
+            tracking_results = await self._load_tracking_from_db(contract_stack_id)
             await progress_callback(PipelineProgressEvent(
-                job_id=job_id, pipeline_stage="amendment_tracking",
-                overall_percent=30 + int(20 * (i / max(len(amendment_outputs), 1))),
-                message=f"Tracking Amendment {i+1} of {len(amendment_outputs)}...",
+                job_id=job_id, pipeline_stage="amendment_tracking", overall_percent=50,
+                message=f"Skipped tracking — {len(tracking_results)} amendments already tracked (checkpoint)",
                 current_agent="amendment_tracker", timestamp=datetime.utcnow(),
             ))
-            track_result = await tracker.run(AmendmentTrackInput(
-                amendment_document_id=amend_output.document_id,
-                amendment_number=amend_output.metadata.amendment_number or (i + 1),
-                amendment_text="",
-                amendment_sections=amend_output.sections,
-                amendment_tables=amend_output.tables,
-                original_sections=cta_output.sections,
-                original_tables=cta_output.tables,
-                prior_amendments=tracking_results,
-            ))
-            tracking_results.append(track_result)
+        else:
+            tracker = self.get_agent("amendment_tracker")
+            amendment_outputs = [p for p in parsed_outputs if p.metadata and p.metadata.document_type == DocumentType.AMENDMENT]
+            amendment_outputs.sort(key=lambda p: p.metadata.effective_date or "")
 
-        await self._save_amendment_tracking(contract_stack_id, tracking_results)
-        await progress_callback(PipelineProgressEvent(
-            job_id=job_id, pipeline_stage="amendment_tracking", overall_percent=50,
-            message=f"Tracked {len(tracking_results)} amendments",
-            current_agent="amendment_tracker", timestamp=datetime.utcnow(),
-        ))
+            tracking_results: list[AmendmentTrackOutput] = []
+            for i, amend_output in enumerate(amendment_outputs):
+                await progress_callback(PipelineProgressEvent(
+                    job_id=job_id, pipeline_stage="amendment_tracking",
+                    overall_percent=30 + int(20 * (i / max(len(amendment_outputs), 1))),
+                    message=f"Tracking Amendment {i+1} of {len(amendment_outputs)}...",
+                    current_agent="amendment_tracker", timestamp=datetime.utcnow(),
+                ))
+                track_result = await tracker.run(AmendmentTrackInput(
+                    amendment_document_id=amend_output.document_id,
+                    amendment_number=amend_output.metadata.amendment_number or (i + 1),
+                    amendment_text="",
+                    amendment_sections=amend_output.sections,
+                    amendment_tables=amend_output.tables,
+                    original_sections=cta_output.sections,
+                    original_tables=cta_output.tables,
+                    prior_amendments=tracking_results,
+                ))
+                tracking_results.append(track_result)
+
+            await self._save_amendment_tracking(contract_stack_id, tracking_results)
+            await progress_callback(PipelineProgressEvent(
+                job_id=job_id, pipeline_stage="amendment_tracking", overall_percent=50,
+                message=f"Tracked {len(tracking_results)} amendments",
+                current_agent="amendment_tracker", timestamp=datetime.utcnow(),
+            ))
 
         # ── Stage 3: Temporal sequencing ─────────────────────
         sequencer = self.get_agent("temporal_sequencer")
@@ -337,68 +491,117 @@ class AgentOrchestrator:
         doc_label_map = {event.document_id: event.label for event in sequence_result.timeline}
 
         # ── Stage 4: Override resolution (parallel per section) ──
-        resolver = self.get_agent("override_resolution")
-        sections_to_resolve = self._build_section_amendment_map(contract_stack_id, cta_output, tracking_results, parsed_outputs)
+        stage4_done = await self._check_stage_complete(contract_stack_id, "override_resolution")
+        if stage4_done:
+            logger.info("Stage 4 (override_resolution) — checkpoint found, skipping")
+            current_clauses = await self._load_resolved_clauses_from_db(contract_stack_id)
+            await progress_callback(PipelineProgressEvent(
+                job_id=job_id, pipeline_stage="override_resolution", overall_percent=80,
+                message=f"Skipped resolution — {len(current_clauses)} clauses already resolved (checkpoint)",
+                current_agent="override_resolution", timestamp=datetime.utcnow(),
+            ))
+        else:
+            resolver = self.get_agent("override_resolution")
+            sections_to_resolve = self._build_section_amendment_map(contract_stack_id, cta_output, tracking_results, parsed_outputs)
 
-        resolve_tasks = [resolver.run(ri) for ri in sections_to_resolve]
-        resolve_results = await asyncio.gather(*resolve_tasks, return_exceptions=True)
+            resolve_tasks = [resolver.run(ri) for ri in sections_to_resolve]
+            resolve_results = await asyncio.gather(*resolve_tasks, return_exceptions=True)
 
-        resolved_clauses: list[OverrideResolutionOutput] = []
-        for i, result in enumerate(resolve_results):
-            if isinstance(result, Exception):
-                raise PipelineError(
-                    f"Override resolution failed for {sections_to_resolve[i].section_number}: {result}",
-                    stage="override_resolution",
+            resolved_clauses: list[OverrideResolutionOutput] = []
+            for i, result in enumerate(resolve_results):
+                if isinstance(result, Exception):
+                    raise PipelineError(
+                        f"Override resolution failed for {sections_to_resolve[i].section_number}: {result}",
+                        stage="override_resolution",
+                    )
+                resolved_clauses.append(result)
+
+            await self._save_resolved_clauses(contract_stack_id, resolved_clauses)
+            current_clauses = [
+                CurrentClause(
+                    section_number=r.clause_version.section_number,
+                    section_title=r.clause_version.section_title,
+                    current_text=r.clause_version.current_text,
+                    clause_category=r.clause_version.clause_category,
+                    source_document_id=r.clause_version.last_modified_by,
+                    source_document_label=doc_label_map.get(r.clause_version.last_modified_by, "Unknown"),
+                    effective_date=r.clause_version.last_modified_date,
                 )
-            resolved_clauses.append(result)
-
-        await self._save_resolved_clauses(contract_stack_id, resolved_clauses)
-        await progress_callback(PipelineProgressEvent(
-            job_id=job_id, pipeline_stage="override_resolution", overall_percent=80,
-            message=f"Resolved {len(resolved_clauses)} clause versions",
-            current_agent="override_resolution", timestamp=datetime.utcnow(),
-        ))
+                for r in resolved_clauses
+            ]
+            await progress_callback(PipelineProgressEvent(
+                job_id=job_id, pipeline_stage="override_resolution", overall_percent=80,
+                message=f"Resolved {len(resolved_clauses)} clause versions",
+                current_agent="override_resolution", timestamp=datetime.utcnow(),
+            ))
 
         # ── Stage 5: Dependency mapping ──────────────────────
-        mapper = self.get_agent("dependency_mapper")
-        current_clauses = [
-            CurrentClause(
-                section_number=r.clause_version.section_number,
-                section_title=r.clause_version.section_title,
-                current_text=r.clause_version.current_text,
-                clause_category=r.clause_version.clause_category,
-                source_document_id=r.clause_version.last_modified_by,
-                source_document_label=doc_label_map.get(r.clause_version.last_modified_by, "Unknown"),
-                effective_date=r.clause_version.last_modified_date,
+        cached_dependencies: list[ClauseDependency] = []
+        stage5_done = await self._check_stage_complete(contract_stack_id, "dependency_mapping")
+        if stage5_done:
+            logger.info("Stage 5 (dependency_mapping) — checkpoint found, skipping")
+            dep_rows = await self.postgres.fetch(
+                "SELECT c1.section_number AS from_section, c2.section_number AS to_section, "
+                "cd.relationship_type, cd.description, cd.confidence "
+                "FROM clause_dependencies cd "
+                "JOIN clauses c1 ON c1.id = cd.from_clause_id "
+                "JOIN clauses c2 ON c2.id = cd.to_clause_id "
+                "WHERE cd.contract_stack_id = $1", contract_stack_id,
             )
-            for r in resolved_clauses
-        ]
-        dep_result = await mapper.run(DependencyMapInput(
-            contract_stack_id=contract_stack_id, current_clauses=current_clauses,
-        ))
-        await progress_callback(PipelineProgressEvent(
-            job_id=job_id, pipeline_stage="dependency_mapping", overall_percent=90,
-            message=f"Mapped {dep_result.total_edges} dependencies",
-            current_agent="dependency_mapper", timestamp=datetime.utcnow(),
-        ))
+            cached_dependencies = [
+                ClauseDependency(
+                    from_section=r["from_section"], to_section=r["to_section"],
+                    relationship_type=r["relationship_type"] or "references",
+                    description=r["description"] or "", confidence=r["confidence"] or 0.8,
+                )
+                for r in dep_rows
+            ]
+            await progress_callback(PipelineProgressEvent(
+                job_id=job_id, pipeline_stage="dependency_mapping", overall_percent=90,
+                message=f"Skipped mapping — {len(cached_dependencies)} dependencies already mapped (checkpoint)",
+                current_agent="dependency_mapper", timestamp=datetime.utcnow(),
+            ))
+        else:
+            mapper = self.get_agent("dependency_mapper")
+            dep_result = await mapper.run(DependencyMapInput(
+                contract_stack_id=contract_stack_id, current_clauses=current_clauses,
+            ))
+            cached_dependencies = dep_result.dependencies
+            await progress_callback(PipelineProgressEvent(
+                job_id=job_id, pipeline_stage="dependency_mapping", overall_percent=90,
+                message=f"Mapped {dep_result.total_edges} dependencies",
+                current_agent="dependency_mapper", timestamp=datetime.utcnow(),
+            ))
 
         # ── Stage 6: Conflict detection ──────────────────────
-        detector = self.get_agent("conflict_detection")
-        context = await self._build_contract_context(contract_stack_id)
+        stage6_done = await self._check_stage_complete(contract_stack_id, "conflict_detection")
+        if stage6_done:
+            logger.info("Stage 6 (conflict_detection) — checkpoint found, skipping")
+            conflict_count = await self.postgres.fetchval(
+                "SELECT COUNT(*) FROM conflicts WHERE contract_stack_id = $1", contract_stack_id,
+            )
+            await progress_callback(PipelineProgressEvent(
+                job_id=job_id, pipeline_stage="complete", overall_percent=100,
+                message=f"Skipped detection — {conflict_count} conflicts already detected (checkpoint). Pipeline complete.",
+                current_agent=None, timestamp=datetime.utcnow(),
+            ))
+        else:
+            detector = self.get_agent("conflict_detection")
+            context = await self._build_contract_context(contract_stack_id)
 
-        conflict_result = await detector.run(ConflictDetectionInput(
-            contract_stack_id=contract_stack_id,
-            current_clauses=current_clauses,
-            contract_stack_context=context,
-            dependency_graph=dep_result.dependencies,
-        ))
-        await self._save_conflicts(contract_stack_id, conflict_result.conflicts)
+            conflict_result = await detector.run(ConflictDetectionInput(
+                contract_stack_id=contract_stack_id,
+                current_clauses=current_clauses,
+                contract_stack_context=context,
+                dependency_graph=cached_dependencies,
+            ))
+            await self._save_conflicts(contract_stack_id, conflict_result.conflicts)
 
-        await progress_callback(PipelineProgressEvent(
-            job_id=job_id, pipeline_stage="complete", overall_percent=100,
-            message=f"Pipeline complete: {len(resolved_clauses)} clauses, {len(conflict_result.conflicts)} conflicts",
-            current_agent=None, timestamp=datetime.utcnow(),
-        ))
+            await progress_callback(PipelineProgressEvent(
+                job_id=job_id, pipeline_stage="complete", overall_percent=100,
+                message=f"Pipeline complete: {len(current_clauses)} clauses, {len(conflict_result.conflicts)} conflicts",
+                current_agent=None, timestamp=datetime.utcnow(),
+            ))
 
         # Save trace and update stack status
         await self._save_trace(contract_stack_id, trace)
@@ -407,11 +610,20 @@ class AgentOrchestrator:
             contract_stack_id,
         )
 
+        clause_count = await self.postgres.fetchval(
+            "SELECT COUNT(*) FROM clauses WHERE contract_stack_id = $1 AND is_current = TRUE", contract_stack_id,
+        )
+        conflict_count = await self.postgres.fetchval(
+            "SELECT COUNT(*) FROM conflicts WHERE contract_stack_id = $1", contract_stack_id,
+        )
+        dep_count = await self.postgres.fetchval(
+            "SELECT COUNT(*) FROM clause_dependencies WHERE contract_stack_id = $1", contract_stack_id,
+        )
+
         return {
-            "clauses_processed": len(resolved_clauses),
-            "conflicts_detected": len(conflict_result.conflicts),
-            "dependencies_mapped": dep_result.total_edges,
-            "conflict_summary": conflict_result.summary.model_dump(),
+            "clauses_processed": clause_count,
+            "conflicts_detected": conflict_count,
+            "dependencies_mapped": dep_count,
             "trace": {"total_input_tokens": trace.total_input_tokens, "total_output_tokens": trace.total_output_tokens,
                        "total_llm_calls": len(trace.llm_calls)},
         }
@@ -651,8 +863,10 @@ class AgentOrchestrator:
                     "description = EXCLUDED.description, affected_sections = EXCLUDED.affected_sections, "
                     "evidence = EXCLUDED.evidence, recommendation = EXCLUDED.recommendation, "
                     "pain_point_id = EXCLUDED.pain_point_id",
-                    stack_id, c.conflict_id, c.conflict_type.value,
-                    c.severity.value, c.description, c.affected_sections,
+                    stack_id, c.conflict_id,
+                    c.conflict_type.value if hasattr(c.conflict_type, 'value') else str(c.conflict_type),
+                    c.severity.value if hasattr(c.severity, 'value') else str(c.severity),
+                    c.description, c.affected_sections,
                     evidence_json,
                     c.recommendation, c.pain_point_id,
                 )

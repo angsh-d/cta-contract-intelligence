@@ -41,9 +41,9 @@ def _is_transient(error: Exception) -> bool:
 
 # ── Model context window limits ────────────────────────────────
 MODEL_CONTEXT_LIMITS: dict[str, int] = {
-    "claude-opus-4-5-20250514": 200_000,
     "claude-sonnet-4-5-20250929": 200_000,
     "gpt-5.2": 128_000,
+    "gemini-3-pro-preview": 1_000_000,
     "gemini-2.5-flash-lite": 1_000_000,
     "gemini-2.5-pro": 1_000_000,
 }
@@ -413,6 +413,9 @@ class BaseAgent(ABC):
 
                 if not expect_json and not use_structured:
                     return response.content
+
+                if not response.content or not response.content.strip():
+                    raise ConnectionError(f"Empty LLM response for {self.config.agent_name}")
 
                 parsed = self._parse_json_response(response.content)
 

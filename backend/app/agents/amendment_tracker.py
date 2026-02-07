@@ -30,8 +30,14 @@ class AmendmentTrackerAgent(BaseAgent):
         result = await self.call_llm(system_prompt, user_prompt)
 
         mods_raw = result.get("modifications")
-        if not mods_raw:
+        if mods_raw is None:
             raise LLMResponseError("AmendmentTrackerAgent: LLM response missing 'modifications'")
+        if not isinstance(mods_raw, list):
+            mods_raw = [mods_raw] if mods_raw else []
+        valid_mod_types = {e.value for e in ModificationType}
+        for m in mods_raw:
+            if m.get("modification_type") not in valid_mod_types:
+                m["modification_type"] = "selective_override"
         modifications = [Modification(**m) for m in mods_raw]
 
         # Buried change scan
@@ -44,12 +50,12 @@ class AmendmentTrackerAgent(BaseAgent):
             amendment_document_id=input_data.amendment_document_id,
             amendment_number=input_data.amendment_number,
             effective_date=result.get("effective_date"),
-            amendment_type=result.get("amendment_type", "unknown"),
-            rationale=result.get("rationale", ""),
+            amendment_type=result.get("amendment_type") or "unknown",
+            rationale=result.get("rationale") or "",
             modifications=modifications,
             sections_modified=[m.section_number for m in modifications],
-            exhibits_affected=result.get("exhibits_affected", []),
-            llm_reasoning=result.get("reasoning", ""),
+            exhibits_affected=self._normalize_exhibits(result.get("exhibits_affected") or []),
+            llm_reasoning=result.get("reasoning") or "",
             extraction_confidence=result.get("extraction_confidence", 0.9),
         )
 
@@ -82,9 +88,16 @@ class AmendmentTrackerAgent(BaseAgent):
         result = await self.call_llm(system_prompt, user_prompt)
 
         missed = []
+        valid_mod_types = {e.value for e in ModificationType}
         for mod in result.get("missed_modifications", []):
             if mod["section_number"] not in found_sections:
-                missed.append(Modification(**mod))
+                if mod.get("modification_type") not in valid_mod_types:
+                    mod["modification_type"] = "selective_override"
+                try:
+                    missed.append(Modification(**mod))
+                except Exception as e:
+                    logger.warning("Skipping invalid buried modification: %s", e)
+                    continue
 
         if missed:
             logger.warning(
@@ -92,6 +105,19 @@ class AmendmentTrackerAgent(BaseAgent):
                 len(missed), [m.section_number for m in missed],
             )
         return missed
+
+    @staticmethod
+    def _normalize_exhibits(exhibits: list) -> list[str]:
+        """Normalize exhibits_affected to list[str] — LLM may return dicts."""
+        normalized = []
+        for item in exhibits:
+            if isinstance(item, str):
+                normalized.append(item)
+            elif isinstance(item, dict):
+                normalized.append(item.get("exhibit_id", str(item)))
+            else:
+                normalized.append(str(item))
+        return normalized
 
     def _format_sections(self, sections: list[ParsedSection], tables: list[ParsedTable] | None = None) -> str:
         """Format sections for prompt, including associated table data."""

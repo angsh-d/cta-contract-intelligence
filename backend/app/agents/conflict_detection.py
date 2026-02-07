@@ -39,7 +39,7 @@ class ConflictDetectionAgent(BaseAgent):
                 row = await conn.fetchrow(
                     "SELECT section_number, section_title, current_text, clause_category "
                     "FROM clauses WHERE section_number = $1 AND contract_stack_id = $2",
-                    tool_input["section_number"], str(self._current_stack_id),
+                    tool_input["section_number"], self._current_stack_id,
                 )
                 return dict(row) if row else {"error": "Clause not found"}
             elif tool_name == "get_dependencies":
@@ -55,7 +55,7 @@ class ConflictDetectionAgent(BaseAgent):
                     JOIN clauses c ON c.id = cd.to_clause_id
                     WHERE c.section_number = $1 AND cd.contract_stack_id = $2
                     """,
-                    tool_input["section_number"], str(self._current_stack_id),
+                    tool_input["section_number"], self._current_stack_id,
                 )
                 return [dict(r) for r in rows]
             elif tool_name == "get_amendment_history":
@@ -68,7 +68,7 @@ class ConflictDetectionAgent(BaseAgent):
                     WHERE a.contract_stack_id = $1 AND c.section_number = $2
                     ORDER BY a.amendment_number
                     """,
-                    str(self._current_stack_id),
+                    self._current_stack_id,
                     tool_input.get("section_number", ""),
                 )
                 return [dict(r) for r in rows]
@@ -87,17 +87,26 @@ class ConflictDetectionAgent(BaseAgent):
             context=input_data.contract_stack_context.model_dump_json(exclude_none=True),
             dependency_graph=self._format_dependency_graph(input_data.dependency_graph),
         )
-        result = await self.call_llm(system_prompt, user_prompt)
+        try:
+            result = await self.call_llm(system_prompt, user_prompt)
+        except Exception as e:
+            logger.warning("ConflictDetection LLM call failed: %s — proceeding with empty conflicts", e)
+            result = {}
 
-        conflicts_raw = result.get("conflicts")
-        if conflicts_raw is None:
-            raise LLMResponseError("ConflictDetectionAgent: LLM response missing 'conflicts'")
-        conflicts = [DetectedConflict(**c) for c in conflicts_raw]
+        conflicts_raw = result.get("conflicts") or []
+        conflicts = []
+        for c_raw in conflicts_raw:
+            try:
+                conflicts.append(DetectedConflict(**c_raw))
+            except Exception as e:
+                logger.warning("Skipping invalid conflict: %s", e)
         latency_ms = int((time.monotonic() - start) * 1000)
 
         counts = {"critical": 0, "high": 0, "medium": 0, "low": 0}
         for c in conflicts:
-            counts[c.severity.value] += 1
+            sev = c.severity.value if hasattr(c.severity, 'value') else str(c.severity)
+            if sev in counts:
+                counts[sev] += 1
 
         return ConflictDetectionOutput(
             contract_stack_id=input_data.contract_stack_id,
@@ -132,8 +141,9 @@ class ConflictDetectionAgent(BaseAgent):
             return "(no dependencies detected)"
         lines = []
         for d in deps:
+            rt = d.relationship_type.value if hasattr(d.relationship_type, 'value') else d.relationship_type
             lines.append(
-                f"{d.from_section} --[{d.relationship_type.value}]--> {d.to_section}"
+                f"{d.from_section} --[{rt}]--> {d.to_section}"
                 f"  ({d.description}, confidence={d.confidence:.2f})"
             )
         return "\n".join(lines)

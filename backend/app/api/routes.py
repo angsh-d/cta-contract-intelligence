@@ -7,7 +7,7 @@ import os
 import shutil
 import time
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Optional
 
@@ -150,7 +150,8 @@ async def upload_document(
             "file_path, effective_date, document_version, processed, created_at) "
             "VALUES ($1, $2, $3, $4, $5, $6, $7, FALSE, $8)",
             doc_id, stack_uuid, document_type, file.filename, str(file_path),
-            effective_date, document_version, datetime.utcnow(),
+            date.fromisoformat(effective_date) if effective_date else None,
+            document_version, datetime.utcnow(),
         )
 
     return {

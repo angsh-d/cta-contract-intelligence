@@ -4,8 +4,6 @@ import asyncio
 import logging
 import time
 from typing import Any, Optional
-from uuid import uuid4
-
 from app.agents.base import BaseAgent
 from app.agents.config import AgentConfig
 from app.exceptions import LLMResponseError
@@ -77,11 +75,11 @@ class DocumentParserAgent(BaseAgent):
         sections = self._deduplicate_sections(all_sections)
 
         # Step 6: Embed and upsert to ChromaDB
-        await self._upsert_embeddings(input_data.contract_stack_id, sections, metadata)
+        await self._upsert_embeddings(input_data.contract_stack_id, sections, metadata, input_data.document_id)
         await self._report_progress("embedding", 95, "Embeddings upserted to ChromaDB")
 
         return DocumentParseOutput(
-            document_id=uuid4(),
+            document_id=input_data.document_id,
             metadata=metadata,
             sections=sections,
             tables=tables,
@@ -141,7 +139,7 @@ class DocumentParserAgent(BaseAgent):
                     seen[section.section_number] = section
         return list(seen.values())
 
-    async def _upsert_embeddings(self, contract_stack_id, sections, metadata):
+    async def _upsert_embeddings(self, contract_stack_id, sections, metadata, document_id=None):
         """Upsert section texts to ChromaDB for semantic search."""
         if not sections:
             return
@@ -149,14 +147,16 @@ class DocumentParserAgent(BaseAgent):
         documents = []
         metadatas = []
         for s in sections:
-            doc_id = f"{contract_stack_id}_{s.section_number}"
-            ids.append(doc_id)
+            chroma_id = f"{contract_stack_id}_{s.section_number}"
+            ids.append(chroma_id)
             documents.append(s.text[:8000])
             meta = {
                 "contract_stack_id": str(contract_stack_id),
                 "section_number": s.section_number,
                 "section_title": s.section_title,
             }
+            if document_id:
+                meta["document_id"] = str(document_id)
             if metadata and metadata.effective_date:
                 meta["effective_date"] = str(metadata.effective_date)
             metadatas.append(meta)
