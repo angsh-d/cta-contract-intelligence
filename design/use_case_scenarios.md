@@ -8,7 +8,7 @@ ContractIQ supports clinical trial contract management through AI-powered analys
 ## CATEGORY 1: DOCUMENT MANAGEMENT & PROCESSING
 
 ### UC-001: Upload and Process Contract Stack
-**Actor:** Clinical Operations Manager  
+**Actor:** Clinical Operations Manager
 **Goal:** Digitize and structure a complete contract stack for analysis
 
 **Scenario:**
@@ -17,14 +17,6 @@ ContractIQ supports clinical trial contract management through AI-powered analys
 3. System processes documents in background (30 seconds)
 4. System extracts sections, identifies amendments, builds knowledge graph
 5. User receives notification: "Contract stack ready for analysis"
-
-**Technical Flow:**
-- POST `/api/v1/contract-stacks` → Create stack
-- POST `/api/v1/contract-stacks/{id}/documents` → Upload each document
-- DocumentParserAgent → Extract text and structure
-- AmendmentTrackerAgent → Identify modifications
-- TemporalSequencerAgent → Order chronologically
-- DependencyMapperAgent → Build knowledge graph
 
 **Success Criteria:**
 - All documents parsed successfully
@@ -37,7 +29,7 @@ ContractIQ supports clinical trial contract management through AI-powered analys
 ---
 
 ### UC-002: View Contract Timeline
-**Actor:** Site Contract Manager  
+**Actor:** Site Contract Manager
 **Goal:** Understand the evolution of a contract over time
 
 **Scenario:**
@@ -53,11 +45,6 @@ ContractIQ supports clinical trial contract management through AI-powered analys
 4. User clicks on Amendment 3 to see details
 5. System shows: sections modified, rationale, current vs. previous terms
 
-**Technical Flow:**
-- GET `/api/v1/contract-stacks/{id}/timeline`
-- TemporalSequencerAgent data retrieved from database
-- Frontend renders interactive timeline with D3.js
-
 **Success Criteria:**
 - Chronological accuracy 100%
 - All amendments properly sequenced
@@ -70,7 +57,7 @@ ContractIQ supports clinical trial contract management through AI-powered analys
 ## CATEGORY 2: TRUTH RECONSTITUTION
 
 ### UC-003: Query Current Contract Terms
-**Actor:** Financial Analyst  
+**Actor:** Financial Analyst
 **Goal:** Determine current payment terms without reading all amendments
 
 **Scenario:**
@@ -84,13 +71,6 @@ ContractIQ supports clinical trial contract management through AI-powered analys
 4. System shows source: Direct link to Amendment 3, Section 7.2 with highlighted text
 5. User clicks source to view original document context
 
-**Technical Flow:**
-- POST `/api/v1/contract-stacks/{id}/query`
-- Query router classifies as "truth_reconstitution"
-- Vector search finds relevant clauses
-- OverrideResolutionAgent determines current state
-- TruthConsolidationAgent synthesizes answer with provenance
-
 **Success Criteria:**
 - Answer provided in <15 seconds
 - 100% accuracy on current terms
@@ -102,7 +82,7 @@ ContractIQ supports clinical trial contract management through AI-powered analys
 ---
 
 ### UC-004: Compare Clause Evolution
-**Actor:** Legal Counsel  
+**Actor:** Legal Counsel
 **Goal:** Understand how a specific clause changed over time
 
 **Scenario:**
@@ -118,12 +98,6 @@ ContractIQ supports clinical trial contract management through AI-powered analys
 3. User sees warning: "This change was buried in Amendment 3 (COVID provisions)"
 4. User exports clause history to Word document for legal review
 
-**Technical Flow:**
-- POST `/api/v1/contract-stacks/{id}/clause-history`
-- Query specific section number
-- OverrideResolutionAgent traces all modifications
-- Frontend displays as timeline with diff highlighting
-
 **Success Criteria:**
 - Complete modification history
 - Highlight buried changes
@@ -134,7 +108,7 @@ ContractIQ supports clinical trial contract management through AI-powered analys
 ---
 
 ### UC-005: Answer Multi-Clause Questions
-**Actor:** Study Manager  
+**Actor:** Study Manager
 **Goal:** Get comprehensive answers requiring multiple contract sections
 
 **Scenario:**
@@ -155,12 +129,6 @@ ContractIQ supports clinical trial contract management through AI-powered analys
    ```
 4. Each component includes clickable source links
 
-**Technical Flow:**
-- Multi-clause semantic search
-- Cross-reference resolution
-- TruthConsolidationAgent synthesizes from multiple sources
-- Provenance tracking for each component
-
 **Success Criteria:**
 - Captures all relevant clauses
 - Synthesizes coherent answer
@@ -173,7 +141,7 @@ ContractIQ supports clinical trial contract management through AI-powered analys
 ## CATEGORY 3: CONFLICT & RISK DETECTION
 
 ### UC-006: Detect Hidden Conflicts
-**Actor:** Compliance Officer  
+**Actor:** Compliance Officer
 **Goal:** Proactively identify contract inconsistencies before they cause problems
 
 **Scenario:**
@@ -202,13 +170,6 @@ ContractIQ supports clinical trial contract management through AI-powered analys
 4. User exports conflict report to PDF for legal review
 5. User marks conflicts as "acknowledged" or "resolved"
 
-**Technical Flow:**
-- POST `/api/v1/contract-stacks/{id}/analyze/conflicts`
-- ConflictDetectionAgent analyzes all clauses
-- Multiple analysis passes: contradictions, gaps, ambiguities, buried changes
-- RiskScoringAgent prioritizes by severity
-- Results saved to conflicts table
-
 **Success Criteria:**
 - Detect 90%+ of material conflicts (validated vs. human review)
 - <5% false positives
@@ -220,7 +181,7 @@ ContractIQ supports clinical trial contract management through AI-powered analys
 ---
 
 ### UC-007: Monitor Contract Health
-**Actor:** Contract Administrator  
+**Actor:** Contract Administrator
 **Goal:** Continuously monitor portfolio for emerging issues
 
 **Scenario:**
@@ -243,14 +204,6 @@ ContractIQ supports clinical trial contract management through AI-powered analys
 4. System shows detailed analysis and recommended actions
 5. User assigns task to legal team to extend insurance
 
-**Technical Flow:**
-- Background monitoring jobs (Celery)
-- Queries run daily checking for:
-  - Expiration dates vs. study timelines
-  - Payment trends (via queries table history)
-  - Regulatory database updates (external API)
-- Real-time dashboard via WebSocket updates
-
 **Success Criteria:**
 - 100% detection of expiration date conflicts
 - 90-day advance warning for critical events
@@ -263,7 +216,7 @@ ContractIQ supports clinical trial contract management through AI-powered analys
 ## CATEGORY 4: RIPPLE EFFECT ANALYSIS
 
 ### UC-008: Analyze Amendment Impact Before Execution
-**Actor:** Clinical Operations Director  
+**Actor:** Clinical Operations Director
 **Goal:** Understand full implications of proposed amendment before issuing to sites
 
 **Scenario:**
@@ -294,13 +247,6 @@ ContractIQ supports clinical trial contract management through AI-powered analys
    - **HIGH:** Renegotiate vendor contracts ($900K)
    - **MEDIUM:** Add technology migration plan
 
-**Technical Flow:**
-- POST `/api/v1/contract-stacks/{id}/analyze/ripple-effects`
-- RippleEffectAnalyzerAgent queries Neo4j dependency graph
-- Multi-hop traversal up to 5 levels deep
-- Claude analyzes each hop for material impacts
-- ActionRecommenderAgent prioritizes and synthesizes
-
 **Success Criteria:**
 - Detect 95%+ of material impacts
 - Multi-hop reasoning up to 5 levels
@@ -312,7 +258,7 @@ ContractIQ supports clinical trial contract management through AI-powered analys
 ---
 
 ### UC-009: Compare Amendment Scenarios
-**Actor:** Budget Manager  
+**Actor:** Budget Manager
 **Goal:** Evaluate multiple amendment options before deciding which to pursue
 
 **Scenario:**
@@ -334,11 +280,6 @@ ContractIQ supports clinical trial contract management through AI-powered analys
 4. User selects Scenario C (cost reduction, high acceptance)
 5. System generates draft amendment with ripple effects already analyzed
 
-**Technical Flow:**
-- Multiple calls to ripple-effects endpoint
-- Comparison engine aggregates results
-- Predictive intelligence estimates site acceptance (future feature)
-
 **Success Criteria:**
 - Side-by-side comparison of up to 5 scenarios
 - Consistent metrics across scenarios
@@ -351,7 +292,7 @@ ContractIQ supports clinical trial contract management through AI-powered analys
 ## CATEGORY 5: CONTRACT REUSABILITY
 
 ### UC-010: Assess Contract Reusability for New Study
-**Actor:** Site Selection Manager  
+**Actor:** Site Selection Manager
 **Goal:** Determine if existing site contract can be reused for new study
 
 **Scenario:**
@@ -377,24 +318,18 @@ ContractIQ supports clinical trial contract management through AI-powered analys
 5. System provides strategic recommendation:
    ```
    RECOMMENDATION: Start Fresh Contract
-   
+
    Rationale:
    - 3 critical blockers require complete renegotiation
    - Modification approach: 8-10 weeks, 73% success rate
    - Fresh contract approach: 12-14 weeks, 95% success rate
    - Time savings of modification not worth increased risk
-   
+
    Suggested Approach:
    - Use master oncology template as starting point
    - Reuse only administrative clauses (Articles 8, 10, 18-21)
    - Leverage existing site relationship for faster negotiation
    ```
-
-**Technical Flow:**
-- POST `/api/v1/contract-stacks/{id}/analyze/reusability`
-- ReusabilityAnalyzerAgent compares requirements
-- Cross-domain analysis (PI, budget, indemnification, insurance)
-- Strategic recommendation based on historical success rates
 
 **Success Criteria:**
 - Identifies all critical blockers
@@ -406,7 +341,7 @@ ContractIQ supports clinical trial contract management through AI-powered analys
 ---
 
 ### UC-011: Find Best Template for New Site
-**Actor:** Contracts Lead  
+**Actor:** Contracts Lead
 **Goal:** Identify the optimal contract template from portfolio for new site negotiation
 
 **Scenario:**
@@ -435,12 +370,6 @@ ContractIQ supports clinical trial contract management through AI-powered analys
 5. System generates new contract using Site 405 as template
 6. User reviews, makes site-specific adjustments, sends to site
 
-**Technical Flow:**
-- POST `/api/v1/portfolio/find-template`
-- Semantic search across portfolio with filters
-- Historical success analysis from queries table
-- Template synthesis from best-performing clauses
-
 **Success Criteria:**
 - Relevant recommendations 90%+ of time
 - Success metrics based on historical data
@@ -453,7 +382,7 @@ ContractIQ supports clinical trial contract management through AI-powered analys
 ## CATEGORY 6: PORTFOLIO INTELLIGENCE
 
 ### UC-012: Portfolio-Wide Payment Terms Analysis
-**Actor:** Finance Director  
+**Actor:** Finance Director
 **Goal:** Standardize payment terms across entire site portfolio
 
 **Scenario:**
@@ -477,12 +406,6 @@ ContractIQ supports clinical trial contract management through AI-powered analys
 5. System shows these are all European sites (regulatory requirement)
 6. User exports report for CFO showing portfolio is optimized
 
-**Technical Flow:**
-- GET `/api/v1/portfolio/analytics/payment-terms`
-- Aggregate query across all contract_stacks
-- Statistical analysis and visualization
-- Export to Excel/PDF
-
 **Success Criteria:**
 - Process 1000+ contracts in <30 seconds
 - Accurate categorization
@@ -493,7 +416,7 @@ ContractIQ supports clinical trial contract management through AI-powered analys
 ---
 
 ### UC-013: Benchmark Against Industry
-**Actor:** VP Clinical Operations  
+**Actor:** VP Clinical Operations
 **Goal:** Understand how our contracts compare to market
 
 **Scenario:**
@@ -526,12 +449,6 @@ ContractIQ supports clinical trial contract management through AI-powered analys
 4. System shows: "Consider increasing cardiology per-patient to $21,000 to improve enrollment competitiveness"
 5. User shares with budget team for next protocol
 
-**Technical Flow:**
-- Industry intelligence requires opt-in data sharing
-- Anonymized aggregation across customers
-- Statistical analysis with privacy preservation
-- Recommendation engine based on correlations
-
 **Success Criteria:**
 - Benchmarks based on 10,000+ contracts minimum
 - Complete anonymization (no customer identification)
@@ -542,7 +459,7 @@ ContractIQ supports clinical trial contract management through AI-powered analys
 ---
 
 ### UC-014: Track Clause Performance Over Time
-**Actor:** Legal Operations Manager  
+**Actor:** Legal Operations Manager
 **Goal:** Identify which contract clauses lead to fastest execution
 
 **Scenario:**
@@ -572,12 +489,6 @@ ContractIQ supports clinical trial contract management through AI-powered analys
 4. User updates master template with Variant B language
 5. System tracks improvement over next 6 months
 
-**Technical Flow:**
-- Machine learning on historical negotiation outcomes
-- Clause variant identification using embeddings
-- Correlation analysis: clause → outcome
-- Continuous learning from new negotiations
-
 **Success Criteria:**
 - Statistical significance (minimum 30 samples per variant)
 - Control for confounding factors (site type, geography)
@@ -590,7 +501,7 @@ ContractIQ supports clinical trial contract management through AI-powered analys
 ## CATEGORY 7: COLLABORATION & WORKFLOW
 
 ### UC-015: Share Analysis with Team
-**Actor:** Contract Manager  
+**Actor:** Contract Manager
 **Goal:** Collaborate with legal and finance teams on contract review
 
 **Scenario:**
@@ -609,12 +520,6 @@ ContractIQ supports clinical trial contract management through AI-powered analys
 9. All feedback consolidated in system
 10. User proceeds with amendment knowing all stakeholders aligned
 
-**Technical Flow:**
-- POST `/api/v1/queries/{id}/share`
-- Generate read-only shareable link
-- Email notifications
-- Comment system (future: stored in queries table)
-
 **Success Criteria:**
 - Shareable links with access control
 - Email notifications
@@ -625,7 +530,7 @@ ContractIQ supports clinical trial contract management through AI-powered analys
 ---
 
 ### UC-016: Export for Regulatory Audit
-**Actor:** Quality Assurance Manager  
+**Actor:** Quality Assurance Manager
 **Goal:** Prepare contract documentation for FDA audit
 
 **Scenario:**
@@ -646,13 +551,6 @@ ContractIQ supports clinical trial contract management through AI-powered analys
 6. User exports as ZIP file with organized folders
 7. Package submitted to FDA within 2 hours of request
 
-**Technical Flow:**
-- POST `/api/v1/contract-stacks/{id}/export/audit-package`
-- Aggregates all data from database
-- Generates compliance report
-- Creates structured ZIP file
-- Includes PDF rendering of all analysis
-
 **Success Criteria:**
 - Complete documentation in <5 minutes
 - FDA-compliant formatting
@@ -666,7 +564,7 @@ ContractIQ supports clinical trial contract management through AI-powered analys
 ## CATEGORY 8: PREDICTIVE INTELLIGENCE (Future Enhancements)
 
 ### UC-017: Predict Negotiation Outcome
-**Actor:** Site Engagement Manager  
+**Actor:** Site Engagement Manager
 **Goal:** Understand likelihood of site accepting proposed terms
 
 **Scenario:**
@@ -679,29 +577,23 @@ ContractIQ supports clinical trial contract management through AI-powered analys
 4. System predicts:
    ```
    Acceptance Probability: 82%
-   
+
    Confidence: High (based on 127 similar cases)
-   
+
    Predicted Timeline: 2.8 weeks
-   
+
    Expected Counter-Proposal: $1,500 per patient (64% probability)
-   
+
    Recommendation:
    - Propose $1,200 as starting point
    - Be prepared to accept up to $1,400
    - Highlight site's imaging center capacity in proposal
    - Reference similar pricing at comparable sites
-   
+
    If proposal is rejected:
    - Most likely objection: Budget constraints (73%)
    - Alternative: Partner imaging with nearby facility (-$400/patient)
    ```
-
-**Technical Flow:**
-- POST `/api/v1/predictions/negotiation-outcome`
-- Machine learning model trained on historical amendments
-- Feature engineering: site characteristics, amendment type, therapeutic area
-- Probabilistic prediction with confidence intervals
 
 **Success Criteria:**
 - Prediction accuracy within ±15% of actual outcome
@@ -713,7 +605,7 @@ ContractIQ supports clinical trial contract management through AI-powered analys
 ---
 
 ### UC-018: Recommend Optimal Amendment Timing
-**Actor:** Portfolio Manager  
+**Actor:** Portfolio Manager
 **Goal:** Decide when to issue amendments across multiple sites
 
 **Scenario:**
@@ -729,23 +621,17 @@ ContractIQ supports clinical trial contract management through AI-powered analys
    Phase 1 (Weeks 1-2): Fast sites (12 sites)
    - Sites 301, 405, 512... (avg 3.2 week response)
    - Start immediately while protocol is finalized
-   
+
    Phase 2 (Weeks 3-4): Medium sites (23 sites)
    - Sites 203, 308, 421... (avg 5.1 week response)
    - Start after Phase 1 feedback incorporated
-   
+
    Phase 3 (Weeks 5-6): Slow sites (15 sites)
    - Sites 107, 234, 567... (avg 8.3 week response)
    - Start last, allow maximum time
-   
+
    Predicted Completion: 8.7 weeks (vs. 12.1 weeks if simultaneous)
    ```
-
-**Technical Flow:**
-- POST `/api/v1/portfolio/optimize-execution`
-- Operations research optimization
-- Constraint satisfaction (resource limits, dependencies)
-- Monte Carlo simulation for timeline prediction
 
 **Success Criteria:**
 - 20-30% faster portfolio-wide execution
@@ -779,21 +665,6 @@ ContractIQ supports clinical trial contract management through AI-powered analys
 | UC-017 | Predict Outcome | Site Engagement | N/A | Negotiation advantage |
 | UC-018 | Optimize Timing | Portfolio Manager | 30% | Resource optimization |
 
-## TECHNICAL IMPLEMENTATION MAPPING
-
-Each use case maps to specific technical components:
-
-| Use Case Category | Primary Agents | Database Tables | API Endpoints |
-|-------------------|----------------|-----------------|---------------|
-| Document Management | Parser, TemporalSequencer | documents, contract_stacks | /contract-stacks, /documents |
-| Truth Reconstitution | OverrideResolver, TruthConsolidator | clauses, amendments | /query |
-| Conflict Detection | ConflictDetector, RiskScorer | conflicts, clauses | /analyze/conflicts |
-| Ripple Analysis | RippleAnalyzer, DependencyMapper | Neo4j graph | /analyze/ripple-effects |
-| Reusability | ReusabilityAnalyzer | clauses, contract_stacks | /analyze/reusability |
-| Portfolio Intelligence | Portfolio analyzers | All tables | /portfolio/* |
-| Collaboration | N/A | queries, users | /share, /export |
-| Predictive | PredictionAgent (future) | queries, outcomes | /predictions/* |
-
 ---
 
 ## PRIORITIZATION FOR MVP
@@ -825,4 +696,4 @@ Each use case maps to specific technical components:
 
 ---
 
-**This use case document provides clear scenarios that map directly to the technical implementation and demonstrate tangible user value at every level.**
+**This use case document provides clear scenarios that demonstrate tangible user value at every level.**
