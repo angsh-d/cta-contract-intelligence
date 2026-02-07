@@ -49,7 +49,33 @@ class TruthSynthesizer(BaseAgent):
         if not answer:
             raise LLMResponseError("TruthSynthesizer: LLM response missing 'answer'")
 
-        sources = [SourceCitation(**s) for s in result.get("sources", [])]
+        sources = []
+        for s in result.get("sources", []):
+            try:
+                doc_id = s.get("document_id")
+                if doc_id:
+                    try:
+                        UUID(str(doc_id))
+                    except (ValueError, AttributeError):
+                        doc_id = None
+                eff = s.get("effective_date")
+                if eff and not isinstance(eff, str):
+                    eff = str(eff)
+                if isinstance(eff, str):
+                    try:
+                        from datetime import date as dt_date
+                        dt_date.fromisoformat(eff)
+                    except (ValueError, TypeError):
+                        eff = None
+                sources.append(SourceCitation(
+                    document_id=doc_id if doc_id else input_data.relevant_clauses[0].source_document_id if input_data.relevant_clauses else None,
+                    document_name=s.get("document_name", ""),
+                    section_number=s.get("section_number", ""),
+                    relevant_text=s.get("relevant_text", ""),
+                    effective_date=eff,
+                ))
+            except Exception as e:
+                logger.warning("Skipping malformed source citation: %s — %s", s, e)
 
         return TruthSynthesisOutput(
             answer=answer,

@@ -453,10 +453,10 @@ class QueryRouteOutput(BaseModel):
 
 class SourceCitation(BaseModel):
     """A citation to a source document/section."""
-    document_id: UUID
-    document_name: str
-    section_number: str
-    relevant_text: str
+    document_id: Optional[UUID] = None
+    document_name: str = ""
+    section_number: str = ""
+    relevant_text: str = ""
     effective_date: Optional[date] = None
 
 

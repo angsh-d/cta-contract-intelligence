@@ -29,7 +29,7 @@ _UPSERT_SQL = """
 class VectorStore:
     """Wraps pgvector operations on the section_embeddings table."""
 
-    EMBEDDING_MODEL = "text-embedding-004"
+    EMBEDDING_MODEL = "gemini-embedding-001"
     EMBEDDING_DIM = 768
 
     def __init__(self, postgres_pool) -> None:
@@ -45,7 +45,7 @@ class VectorStore:
     async def _generate_embeddings(
         self, texts: list[str], task_type: str = "RETRIEVAL_DOCUMENT",
     ) -> list[list[float]]:
-        """Generate embeddings via Gemini text-embedding-004 (async).
+        """Generate embeddings via Gemini gemini-embedding-001 (async).
 
         Args:
             texts: Texts to embed.
@@ -55,7 +55,10 @@ class VectorStore:
         result = await client.aio.models.embed_content(
             model=self.EMBEDDING_MODEL,
             contents=texts,
-            config=types.EmbedContentConfig(task_type=task_type),
+            config=types.EmbedContentConfig(
+                task_type=task_type,
+                output_dimensionality=self.EMBEDDING_DIM,
+            ),
         )
         return [e.values for e in result.embeddings]
 
