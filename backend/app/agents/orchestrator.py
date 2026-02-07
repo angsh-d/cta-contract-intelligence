@@ -492,6 +492,13 @@ class AgentOrchestrator:
         if stage4_done:
             logger.info("Stage 4 (override_resolution) — checkpoint found, skipping")
             current_clauses = await self._load_resolved_clauses_from_db(contract_stack_id)
+
+            # Ensure resolved-clause embeddings exist (may be missing if prior run
+            # crashed after saving clauses but before embedding)
+            if not await self.vector_store.has_resolved_embeddings(contract_stack_id):
+                logger.info("Resolved embeddings missing for stack %s — re-embedding", contract_stack_id)
+                await self._embed_resolved_clauses(contract_stack_id, current_clauses)
+
             await progress_callback(PipelineProgressEvent(
                 job_id=job_id, pipeline_stage="override_resolution", overall_percent=80,
                 message=f"Skipped resolution — {len(current_clauses)} clauses already resolved (checkpoint)",
@@ -526,6 +533,10 @@ class AgentOrchestrator:
                 )
                 for r in resolved_clauses
             ]
+
+            # Embed resolved current-truth clauses for query-time semantic search
+            await self._embed_resolved_clauses(contract_stack_id, current_clauses)
+
             await progress_callback(PipelineProgressEvent(
                 job_id=job_id, pipeline_stage="override_resolution", overall_percent=80,
                 message=f"Resolved {len(resolved_clauses)} clause versions",
@@ -706,6 +717,22 @@ class AgentOrchestrator:
                 amendments=amendments,
             ))
         return inputs
+
+    async def _embed_resolved_clauses(self, stack_id: UUID, current_clauses: list[CurrentClause]) -> None:
+        """Embed resolved current-truth clauses into pgvector for query-time semantic search."""
+        clause_dicts = [
+            {
+                "section_number": c.section_number,
+                "section_title": c.section_title,
+                "current_text": c.current_text,
+                "clause_category": c.clause_category,
+                "source_document_id": c.source_document_id,
+                "effective_date": c.effective_date,
+            }
+            for c in current_clauses
+        ]
+        count = await self.vector_store.upsert_resolved_clauses(stack_id, clause_dicts)
+        logger.info("Embedded %d resolved clauses for query search (stack %s)", count, stack_id)
 
     async def _retrieve_clauses(self, query_text, stack_id, route_result) -> list[CurrentClause]:
         """Multi-source clause retrieval: pgvector + PostgreSQL (batch query)."""
