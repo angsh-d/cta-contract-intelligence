@@ -11,7 +11,7 @@ load_dotenv()
 
 async def create_postgres_pool() -> asyncpg.Pool:
     """Create asyncpg connection pool to NeonDB PostgreSQL."""
-    database_url = os.environ.get("EXTERNAL_DATABASE_URL") or os.environ["DATABASE_URL"]
+    database_url = os.environ.get("DATABASE_URL") or os.environ.get("EXTERNAL_DATABASE_URL", "")
     return await asyncpg.create_pool(
         database_url,
         min_size=2,
