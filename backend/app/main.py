@@ -29,16 +29,18 @@ async def lifespan(app: FastAPI):
     # Store pool on app.state for direct use in routes
     app.state.postgres_pool = postgres_pool
 
-    # Import here to avoid circular imports during module loading
-    from app.agents.orchestrator import AgentOrchestrator
+    try:
+        from app.agents.orchestrator import AgentOrchestrator
 
-    app.state.orchestrator = AgentOrchestrator(
-        postgres_pool=postgres_pool,
-        chroma_collection=chroma_collection,
-    )
-
-    logger.info("ContractIQ ready — orchestrator initialised with %d agents",
-                len(app.state.orchestrator.agents))
+        app.state.orchestrator = AgentOrchestrator(
+            postgres_pool=postgres_pool,
+            chroma_collection=chroma_collection,
+        )
+        logger.info("ContractIQ ready — orchestrator initialised with %d agents",
+                    len(app.state.orchestrator.agents))
+    except Exception as exc:
+        logger.warning("Orchestrator init failed (missing API keys?): %s — server running in limited mode", exc)
+        app.state.orchestrator = None
     yield
 
     # Shutdown
