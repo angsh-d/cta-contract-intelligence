@@ -21,3 +21,16 @@ tmp/
 
 # ChromaDB local data
 chroma_data/
+
+# Python
+*.pyo
+*.pyd
+.Python
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+.pythonlibs/
+pip-log.txt
+pip-delete-this-directory.txt

@@ -80,6 +80,14 @@ def _parse_uuid(value: str, label: str = "ID") -> uuid.UUID:
         raise HTTPException(status_code=400, detail=f"Invalid {label}: {value}")
 
 
+def _require_orchestrator(request: Request):
+    """Return orchestrator or raise 503 if AI agents are unavailable."""
+    orchestrator = request.app.state.orchestrator
+    if orchestrator is None:
+        raise HTTPException(status_code=503, detail="AI agents unavailable — API keys not configured")
+    return orchestrator
+
+
 # ── Contract Stack Endpoints ──────────────────────────────────
 
 @router.post("/contract-stacks", response_model=ContractStackResponse)
@@ -183,7 +191,7 @@ async def list_documents(stack_id: str, request: Request):
 @router.post("/contract-stacks/{stack_id}/process")
 async def process_contract_stack(stack_id: str, request: Request):
     pool = request.app.state.postgres_pool
-    orchestrator = request.app.state.orchestrator
+    orchestrator = _require_orchestrator(request)
     stack_uuid = _parse_uuid(stack_id, "stack_id")
 
     # Verify stack exists and has documents
@@ -267,7 +275,7 @@ async def get_job_status(job_id: str):
 
 @router.post("/contract-stacks/{stack_id}/query")
 async def query_contract_stack(stack_id: str, req: QueryRequest, request: Request):
-    orchestrator = request.app.state.orchestrator
+    orchestrator = _require_orchestrator(request)
     stack_uuid = _parse_uuid(stack_id, "stack_id")
     start = time.monotonic()
 
@@ -329,7 +337,7 @@ async def analyze_conflicts(stack_id: str, req: ConflictAnalysisRequest, request
 async def analyze_ripple_effects(stack_id: str, req: RippleAnalysisRequest, request: Request):
     from app.models.agent_schemas import ProposedChange, RippleEffectInput
 
-    orchestrator = request.app.state.orchestrator
+    orchestrator = _require_orchestrator(request)
     stack_uuid = _parse_uuid(stack_id, "stack_id")
 
     ripple_agent = orchestrator.get_agent("ripple_effect")
