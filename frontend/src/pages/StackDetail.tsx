@@ -888,6 +888,204 @@ function DocumentDetailView({
   )
 }
 
+function TimelineEntryCard({ stackId, entry, index }: { stackId: string; entry: TimelineEntry; index: number }) {
+  const [expanded, setExpanded] = useState(false)
+  const isRoot = entry.document_type === 'cta'
+  const { data: clausesData, isLoading: clausesLoading } = useDocumentClauses(
+    stackId,
+    expanded ? entry.document_id : null
+  )
+  const clauses = clausesData?.clauses || []
+
+  const modifiedClauses = clauses.filter((c: DocumentClause) => {
+    if (!c.source_chain || c.source_chain.length < 2) return false
+    const lastLink = c.source_chain[c.source_chain.length - 1]
+    return lastLink?.modification_type && lastLink.modification_type !== 'original'
+  })
+
+  const newClauses = clauses.filter((c: DocumentClause) => {
+    if (!c.source_chain || c.source_chain.length === 0) return true
+    const lastLink = c.source_chain[c.source_chain.length - 1]
+    return lastLink?.modification_type === 'added' || lastLink?.modification_type === 'original'
+  })
+
+  const displayClauses = isRoot ? clauses : (modifiedClauses.length > 0 ? modifiedClauses : clauses)
+
+  const getChangeLabel = (clause: DocumentClause) => {
+    if (!clause.source_chain || clause.source_chain.length === 0) return null
+    const lastLink = clause.source_chain[clause.source_chain.length - 1]
+    if (!lastLink?.modification_type || lastLink.modification_type === 'original') return null
+    const typeMap: Record<string, string> = {
+      'amended': 'Amended',
+      'added': 'New',
+      'superseded': 'Superseded',
+      'replaced': 'Replaced',
+      'modified': 'Modified',
+      'deleted': 'Removed',
+    }
+    return typeMap[lastLink.modification_type] || lastLink.modification_type
+  }
+
+  const getChangeDescription = (clause: DocumentClause) => {
+    if (!clause.source_chain || clause.source_chain.length === 0) return null
+    const lastLink = clause.source_chain[clause.source_chain.length - 1]
+    return lastLink?.change_description || null
+  }
+
+  return (
+    <motion.div
+      key={entry.document_id}
+      initial={{ opacity: 0, x: -20 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ delay: index * 0.1, duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] }}
+      className="relative flex gap-6 pl-0 py-3"
+    >
+      <div className="relative z-10 flex-shrink-0">
+        <motion.div
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          transition={{ delay: index * 0.1 + 0.15, type: 'spring', stiffness: 300, damping: 20 }}
+          className={`w-16 h-16 rounded-2xl flex items-center justify-center shadow-[0_2px_8px_rgba(0,0,0,0.08)] ${
+            isRoot
+              ? 'bg-apple-pure shadow-[0_4px_16px_rgba(0,0,0,0.2)]'
+              : 'bg-white border-2 border-apple-silver'
+          }`}
+        >
+          <FileText className={`w-6 h-6 ${isRoot ? 'text-white' : 'text-apple-dark2'}`} />
+        </motion.div>
+      </div>
+
+      <div className="flex-1">
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className={`w-full text-left rounded-2xl p-5 transition-all duration-300 ${
+            isRoot
+              ? 'bg-apple-pure text-white shadow-[0_4px_20px_rgba(0,0,0,0.15)]'
+              : 'bg-white border border-black/[0.04] hover:shadow-[0_4px_16px_rgba(0,0,0,0.06)]'
+          }`}
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0 flex-1">
+              <p className={`text-[16px] font-semibold truncate ${isRoot ? 'text-white' : 'text-apple-black'}`}>
+                {entry.filename}
+              </p>
+              <p className={`text-[13px] mt-1 capitalize ${isRoot ? 'text-white/70' : 'text-apple-gray'}`}>
+                {entry.document_type.replace('_', ' ')}
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {entry.effective_date && (
+                <span className={`text-[13px] font-medium px-3 py-1.5 rounded-xl ${
+                  isRoot ? 'bg-white/15 text-white' : 'bg-apple-bg text-apple-dark2'
+                }`}>
+                  {entry.effective_date}
+                </span>
+              )}
+              <ChevronDown className={`w-4 h-4 transition-transform duration-300 ${expanded ? 'rotate-180' : ''} ${
+                isRoot ? 'text-white/60' : 'text-apple-light'
+              }`} />
+            </div>
+          </div>
+          {entry.document_version && (
+            <span className={`inline-block mt-3 text-[12px] font-mono px-2.5 py-1 rounded-lg ${
+              isRoot ? 'bg-white/10 text-white/80' : 'bg-apple-silver/50 text-apple-dark2'
+            }`}>
+              v{entry.document_version}
+            </span>
+          )}
+        </button>
+
+        <AnimatePresence>
+          {expanded && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
+              className="overflow-hidden"
+            >
+              <div className="mt-2 ml-2 border-l-2 border-apple-silver/60 pl-4 py-3 space-y-2">
+                {clausesLoading ? (
+                  <div className="flex items-center gap-2 py-4 px-3">
+                    <Loader2 className="w-4 h-4 animate-spin text-apple-gray" />
+                    <span className="text-[13px] text-apple-gray">Loading clauses...</span>
+                  </div>
+                ) : displayClauses.length === 0 ? (
+                  <div className="py-4 px-3">
+                    <p className="text-[13px] text-apple-gray">No clauses extracted from this document.</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-3 px-3 pb-2">
+                      <span className="text-[12px] font-semibold text-apple-dark2 uppercase tracking-wider">
+                        {isRoot ? 'Established Clauses' : 'Key Changes'}
+                      </span>
+                      <span className="text-[11px] text-apple-gray bg-apple-bg px-2 py-0.5 rounded-full">
+                        {displayClauses.length} {displayClauses.length === 1 ? 'clause' : 'clauses'}
+                      </span>
+                    </div>
+                    {displayClauses.slice(0, 10).map((clause: DocumentClause) => {
+                      const changeLabel = getChangeLabel(clause)
+                      const changeDesc = getChangeDescription(clause)
+                      return (
+                        <div
+                          key={clause.section_number}
+                          className="bg-apple-bg/60 rounded-xl px-4 py-3 hover:bg-apple-bg transition-colors duration-200"
+                        >
+                          <div className="flex items-start gap-3">
+                            <span className="text-[12px] font-mono font-medium text-apple-dark2 bg-white px-2 py-0.5 rounded-md border border-black/[0.04] shrink-0 mt-0.5">
+                              {clause.section_number}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-[13px] font-medium text-apple-black">
+                                  {clause.section_title || clause.section_number}
+                                </span>
+                                {changeLabel && (
+                                  <span className="text-[10px] font-semibold uppercase tracking-wider text-apple-dark2 bg-apple-silver/60 px-1.5 py-0.5 rounded">
+                                    {changeLabel}
+                                  </span>
+                                )}
+                                {clause.conflicts && clause.conflicts.length > 0 && (
+                                  <span className="text-[10px] font-semibold uppercase tracking-wider text-apple-dark2 bg-apple-silver px-1.5 py-0.5 rounded flex items-center gap-1">
+                                    <AlertTriangle className="w-2.5 h-2.5" />
+                                    Conflict
+                                  </span>
+                                )}
+                              </div>
+                              {changeDesc && (
+                                <p className="text-[12px] text-apple-gray2 mt-1 leading-relaxed line-clamp-2">
+                                  {changeDesc}
+                                </p>
+                              )}
+                              {!changeDesc && clause.current_text && (
+                                <p className="text-[12px] text-apple-gray2 mt-1 leading-relaxed line-clamp-2">
+                                  {clause.current_text}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                    {displayClauses.length > 10 && (
+                      <div className="px-3 pt-1">
+                        <span className="text-[12px] text-apple-gray">
+                          + {displayClauses.length - 10} more clauses
+                        </span>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </motion.div>
+  )
+}
+
 function TimelineTab({ stackId }: { stackId: string }) {
   const { data, isLoading } = useTimeline(stackId)
   const timeline = data?.timeline || []
@@ -921,64 +1119,9 @@ function TimelineTab({ stackId }: { stackId: string }) {
       <div className="absolute left-8 top-0 bottom-0 w-[2px] bg-gradient-to-b from-apple-dark via-apple-silver to-apple-bg" />
 
       <div className="space-y-2">
-        {timeline.map((entry: TimelineEntry, i: number) => {
-          const isRoot = entry.document_type === 'cta'
-          return (
-            <motion.div
-              key={entry.document_id}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: i * 0.1, duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] }}
-              className="relative flex gap-6 pl-0 py-3"
-            >
-              <div className="relative z-10 flex-shrink-0">
-                <motion.div
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  transition={{ delay: i * 0.1 + 0.15, type: 'spring', stiffness: 300, damping: 20 }}
-                  className={`w-16 h-16 rounded-2xl flex items-center justify-center shadow-[0_2px_8px_rgba(0,0,0,0.08)] ${
-                    isRoot
-                      ? 'bg-apple-pure shadow-[0_4px_16px_rgba(0,0,0,0.2)]'
-                      : 'bg-white border-2 border-apple-silver'
-                  }`}
-                >
-                  <FileText className={`w-6 h-6 ${isRoot ? 'text-white' : 'text-apple-dark2'}`} />
-                </motion.div>
-              </div>
-
-              <div className={`flex-1 rounded-2xl p-5 transition-all duration-300 ${
-                isRoot
-                  ? 'bg-apple-pure text-white shadow-[0_4px_20px_rgba(0,0,0,0.15)]'
-                  : 'bg-white border border-black/[0.04] hover:shadow-[0_4px_16px_rgba(0,0,0,0.06)]'
-              }`}>
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <p className={`text-[16px] font-semibold truncate ${isRoot ? 'text-white' : 'text-apple-black'}`}>
-                      {entry.filename}
-                    </p>
-                    <p className={`text-[13px] mt-1 capitalize ${isRoot ? 'text-white/70' : 'text-apple-gray'}`}>
-                      {entry.document_type.replace('_', ' ')}
-                    </p>
-                  </div>
-                  {entry.effective_date && (
-                    <span className={`shrink-0 text-[13px] font-medium px-3 py-1.5 rounded-xl ${
-                      isRoot ? 'bg-white/15 text-white' : 'bg-apple-bg text-apple-dark2'
-                    }`}>
-                      {entry.effective_date}
-                    </span>
-                  )}
-                </div>
-                {entry.document_version && (
-                  <span className={`inline-block mt-3 text-[12px] font-mono px-2.5 py-1 rounded-lg ${
-                    isRoot ? 'bg-white/10 text-white/80' : 'bg-apple-silver/50 text-apple-dark2'
-                  }`}>
-                    v{entry.document_version}
-                  </span>
-                )}
-              </div>
-            </motion.div>
-          )
-        })}
+        {timeline.map((entry: TimelineEntry, i: number) => (
+          <TimelineEntryCard key={entry.document_id} stackId={stackId} entry={entry} index={i} />
+        ))}
       </div>
     </div>
   )
