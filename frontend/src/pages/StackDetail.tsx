@@ -480,11 +480,44 @@ function DocumentDetailView({
   const [numPages, setNumPages] = useState<number | null>(null)
   const [pageNumber, setPageNumber] = useState(1)
   const [showClauses, setShowClauses] = useState(true)
+  const [selectedClause, setSelectedClause] = useState<string | null>(null)
+  const [searchingPage, setSearchingPage] = useState(false)
+  const pdfDocRef = useRef<any>(null)
   const pdfUrl = api.getDocumentPdfUrl(stackId, documentId)
 
   const onDocumentLoadSuccess = useCallback(({ numPages }: { numPages: number }) => {
     setNumPages(numPages)
   }, [])
+
+  const findClausePage = useCallback(async (sectionNumber: string) => {
+    if (!pdfUrl || !numPages) return
+    setSearchingPage(true)
+    setSelectedClause(sectionNumber)
+    try {
+      const loadingTask = pdfjs.getDocument(pdfUrl)
+      const pdf = await loadingTask.promise
+      const normalizedSection = sectionNumber.replace(/\s+/g, '').toLowerCase()
+      for (let p = 1; p <= pdf.numPages; p++) {
+        const page = await pdf.getPage(p)
+        const textContent = await page.getTextContent()
+        const pageText = textContent.items.map((item: any) => item.str).join(' ').toLowerCase()
+        const patterns = [
+          `section ${normalizedSection}`,
+          `article ${normalizedSection}`,
+          normalizedSection + '.',
+          normalizedSection + ' ',
+        ]
+        if (patterns.some(pat => pageText.includes(pat))) {
+          setPageNumber(p)
+          break
+        }
+      }
+    } catch (err) {
+      console.warn('PDF text search failed:', err)
+    } finally {
+      setSearchingPage(false)
+    }
+  }, [pdfUrl, numPages])
 
   // Close on Escape key
   useEffect(() => {
@@ -633,13 +666,22 @@ function DocumentDetailView({
                       const conflicts = clause.conflicts || []
                       const isHistoryOpen = expandedHistory.has(clause.section_number)
 
+                      const isSelected = selectedClause === clause.section_number
+
                       return (
                         <motion.div
                           key={`${clause.section_number}-${i}`}
                           initial={{ opacity: 0, y: 8 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: i * 0.03 }}
-                          className={`bg-white rounded-xl border p-4 hover:shadow-[0_4px_12px_rgba(0,0,0,0.04)] transition-shadow duration-200 ${conflicts.length > 0 ? 'border-red-200/60' : 'border-black/[0.04]'}`}
+                          onClick={() => findClausePage(clause.section_number)}
+                          className={`bg-white rounded-xl border p-4 cursor-pointer transition-all duration-200 ${
+                            isSelected
+                              ? 'border-apple-pure/40 shadow-[0_0_0_1px_rgba(29,29,31,0.15),0_4px_12px_rgba(0,0,0,0.08)] ring-1 ring-apple-pure/20'
+                              : conflicts.length > 0
+                                ? 'border-red-200/60 hover:shadow-[0_4px_12px_rgba(0,0,0,0.04)]'
+                                : 'border-black/[0.04] hover:shadow-[0_4px_12px_rgba(0,0,0,0.04)]'
+                          }`}
                         >
                           {/* Badges row */}
                           <div className="flex items-center gap-2 mb-2 flex-wrap">
@@ -697,7 +739,7 @@ function DocumentDetailView({
                                   <div
                                     key={conflict.conflict_id}
                                     className={`rounded-lg bg-gray-50/80 p-2.5 ${sc.border} cursor-pointer transition-colors hover:bg-gray-100/80`}
-                                    onClick={() => toggleConflict(conflict.conflict_id)}
+                                    onClick={(e) => { e.stopPropagation(); toggleConflict(conflict.conflict_id); }}
                                   >
                                     <div className="flex items-center gap-2">
                                       <span className={`w-2 h-2 rounded-full flex-shrink-0 ${sc.dot}`} />
@@ -730,7 +772,7 @@ function DocumentDetailView({
                           {chain.length > 1 && (
                             <div className="mt-3">
                               <button
-                                onClick={() => toggleHistory(clause.section_number)}
+                                onClick={(e) => { e.stopPropagation(); toggleHistory(clause.section_number); }}
                                 className="flex items-center gap-1.5 text-[11px] font-medium text-apple-gray hover:text-apple-dark2 transition-colors"
                               >
                                 <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${isHistoryOpen ? 'rotate-180' : ''}`} />
@@ -801,7 +843,8 @@ function DocumentDetailView({
               >
                 <ChevronLeft className="w-4 h-4 text-apple-dark2" />
               </button>
-              <span className="text-[13px] font-medium text-apple-dark2 min-w-[100px] text-center">
+              <span className="text-[13px] font-medium text-apple-dark2 min-w-[100px] text-center flex items-center justify-center gap-2">
+                {searchingPage && <Loader2 className="w-3.5 h-3.5 animate-spin text-apple-gray" />}
                 Page {pageNumber} {numPages ? `of ${numPages}` : ''}
               </span>
               <button
