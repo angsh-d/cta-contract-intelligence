@@ -107,12 +107,19 @@ export default function Landing() {
 
   return (
     <div className="min-h-screen bg-white">
-      <nav className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-xl border-b border-black/[0.04]">
+      <nav className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-xl border-b border-black/[0.06]">
         <div className="max-w-[1120px] mx-auto px-6 flex items-center justify-between h-[48px]">
-          <Link to="/" className="flex items-center gap-2.5">
-            <Shield className="w-[18px] h-[18px] text-apple-black" />
-            <span className="text-[14px] font-semibold tracking-[-0.01em] text-apple-black">ContractIQ</span>
-          </Link>
+          <div className="flex items-center gap-3">
+            <img
+              src="https://www.saama.com/wp-content/uploads/saama_logo.svg"
+              alt="Saama"
+              className="h-5"
+            />
+            <div className="w-[1px] h-5 bg-black/15" />
+            <span className="text-[13px] font-medium text-apple-dark2 tracking-tight">
+              Digital Contract Platform
+            </span>
+          </div>
           <div className="flex items-center gap-8">
             <a href="#features" className="text-[12px] font-medium text-apple-gray2 hover:text-apple-black transition-colors hidden sm:block">Features</a>
             <a href="#how-it-works" className="text-[12px] font-medium text-apple-gray2 hover:text-apple-black transition-colors hidden sm:block">How It Works</a>
@@ -330,9 +337,14 @@ export default function Landing() {
 
       <footer className="py-8 px-6 bg-apple-bg border-t border-black/[0.04]">
         <div className="max-w-[1120px] mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Shield className="w-4 h-4 text-apple-gray" />
-            <span className="text-[12px] text-apple-gray font-medium">ContractIQ</span>
+          <div className="flex items-center gap-3">
+            <img
+              src="https://www.saama.com/wp-content/uploads/saama_logo.svg"
+              alt="Saama"
+              className="h-4 opacity-40"
+            />
+            <div className="w-[1px] h-4 bg-black/10" />
+            <span className="text-[12px] text-apple-gray font-medium">Digital Contract Platform</span>
           </div>
           <p className="text-[12px] text-apple-gray">
             AI-Powered Contract Intelligence for Clinical Trials
