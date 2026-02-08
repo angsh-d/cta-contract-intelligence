@@ -2109,29 +2109,8 @@ function RippleTab({ stackId }: { stackId: string }) {
             transition={{ delay: 0.3 }}
             className="bg-apple-offwhite rounded-3xl border border-black/[0.03] p-7"
           >
-            <h4 className="text-[17px] font-semibold text-apple-black tracking-tight mb-4">Impact Summary</h4>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {result.total_impacts != null && (
-                <div className="bg-white rounded-2xl p-5 border border-black/[0.03]">
-                  <p className="text-[12px] font-medium text-apple-gray uppercase tracking-wider mb-1">Total Impacts</p>
-                  <p className="text-[28px] font-bold text-apple-pure tracking-tight">{result.total_impacts}</p>
-                </div>
-              )}
-              {result.cascade_depth != null && (
-                <div className="bg-white rounded-2xl p-5 border border-black/[0.03]">
-                  <p className="text-[12px] font-medium text-apple-gray uppercase tracking-wider mb-1">Cascade Depth</p>
-                  <p className="text-[28px] font-bold text-apple-pure tracking-tight">{result.cascade_depth} hops</p>
-                </div>
-              )}
-              {(result.estimated_total_cost || result.estimated_cost) && (
-                <div className="bg-white rounded-2xl p-5 border border-black/[0.03]">
-                  <p className="text-[12px] font-medium text-apple-gray uppercase tracking-wider mb-1">Estimated Cost</p>
-                  <p className="text-[28px] font-bold text-apple-pure tracking-tight">{result.estimated_total_cost || result.estimated_cost}</p>
-                </div>
-              )}
-            </div>
             {flatRecommendations.length > 0 && (
-              <div className="mt-5 pt-5 border-t border-black/[0.04]">
+              <div>
                 <p className="text-[13px] font-semibold text-apple-dark mb-3">Recommendations</p>
                 <div className="space-y-2.5">
                   {flatRecommendations.map((rec: any, k: number) => {
