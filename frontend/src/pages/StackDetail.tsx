@@ -1534,10 +1534,80 @@ function QueryTab({ stackId }: { stackId: string }) {
 function ConflictsTab({ stackId }: { stackId: string }) {
   const conflictsMutation = useConflicts(stackId)
   const [analyzed, setAnalyzed] = useState(false)
+  const [revealPhase, setRevealPhase] = useState<'idle' | 'scanning' | 'revealing' | 'done'>('idle')
+  const [visibleCount, setVisibleCount] = useState(0)
+  const [scanProgress, setScanProgress] = useState(0)
+  const scanTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const revealTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const scanMessages = [
+    'Initializing adversarial scan agents...',
+    'Loading clause embeddings from vector store...',
+    'Cross-referencing amendment chain §1–§15...',
+    'Analyzing override conflicts across 6 documents...',
+    'Scanning financial obligation contradictions...',
+    'Evaluating regulatory compliance gaps...',
+    'Running severity scoring model...',
+    'Compiling conflict report...',
+  ]
+  const [scanMsgIdx, setScanMsgIdx] = useState(0)
+
+  useEffect(() => {
+    return () => {
+      if (scanTimerRef.current) clearInterval(scanTimerRef.current)
+      if (revealTimerRef.current) clearInterval(revealTimerRef.current)
+    }
+  }, [])
 
   const handleAnalyze = async () => {
+    setRevealPhase('scanning')
+    setScanProgress(0)
+    setScanMsgIdx(0)
+
+    const msgTimer = setInterval(() => {
+      setScanMsgIdx(prev => {
+        if (prev < scanMessages.length - 1) return prev + 1
+        return prev
+      })
+    }, 800)
+
+    const progressTimer = setInterval(() => {
+      setScanProgress(prev => {
+        if (prev >= 100) return 100
+        return prev + Math.random() * 8 + 2
+      })
+    }, 200)
+    scanTimerRef.current = progressTimer
+
     await conflictsMutation.mutateAsync('medium')
     setAnalyzed(true)
+
+    clearInterval(progressTimer)
+    clearInterval(msgTimer)
+    scanTimerRef.current = null
+    setScanProgress(100)
+    setScanMsgIdx(scanMessages.length - 1)
+
+    await new Promise(r => setTimeout(r, 600))
+
+    setRevealPhase('revealing')
+    setVisibleCount(0)
+
+    const total = conflictsMutation.data?.conflicts?.length || 0
+    if (total > 0) {
+      let count = 0
+      revealTimerRef.current = setInterval(() => {
+        count++
+        setVisibleCount(count)
+        if (count >= total) {
+          if (revealTimerRef.current) clearInterval(revealTimerRef.current)
+          revealTimerRef.current = null
+          setTimeout(() => setRevealPhase('done'), 400)
+        }
+      }, 700)
+    } else {
+      setRevealPhase('done')
+    }
   }
 
   const data = conflictsMutation.data
@@ -1550,7 +1620,7 @@ function ConflictsTab({ stackId }: { stackId: string }) {
     low: { weight: 'border-l-2 border-l-apple-light', dot: 'bg-apple-light' },
   }
 
-  if (!analyzed && !conflictsMutation.isPending) {
+  if (!analyzed && revealPhase === 'idle' && !conflictsMutation.isPending) {
     return (
       <motion.div {...fadeUp} transition={{ duration: 0.5 }} className="text-center py-24">
         <div className="w-20 h-20 rounded-full bg-apple-bg flex items-center justify-center mx-auto mb-6">
@@ -1573,9 +1643,9 @@ function ConflictsTab({ stackId }: { stackId: string }) {
     )
   }
 
-  if (conflictsMutation.isPending) {
+  if (revealPhase === 'scanning' || conflictsMutation.isPending) {
     return (
-      <motion.div {...fadeUp} className="text-center py-24">
+      <motion.div {...fadeUp} className="text-center py-20">
         <motion.div
           animate={{ scale: [1, 1.15, 1], opacity: [0.6, 1, 0.6] }}
           transition={{ duration: 2, repeat: Infinity }}
@@ -1584,10 +1654,33 @@ function ConflictsTab({ stackId }: { stackId: string }) {
           <Shield className="w-10 h-10 text-apple-dark" />
         </motion.div>
         <p className="text-[20px] font-semibold text-apple-black tracking-tight mb-2">AI agents analyzing contracts...</p>
-        <p className="text-[15px] text-apple-gray">Scanning clauses for contradictions and risks</p>
+        <motion.p
+          key={scanMsgIdx}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+          className="text-[14px] text-apple-gray mb-6 h-5"
+        >
+          {scanMessages[Math.min(scanMsgIdx, scanMessages.length - 1)]}
+        </motion.p>
+        <div className="max-w-xs mx-auto">
+          <div className="h-1 bg-apple-silver/60 rounded-full overflow-hidden">
+            <motion.div
+              className="h-full bg-apple-dark2 rounded-full"
+              animate={{ width: `${Math.min(scanProgress, 100)}%` }}
+              transition={{ duration: 0.3, ease: 'easeOut' }}
+            />
+          </div>
+          <p className="text-[11px] text-apple-light mt-2 font-medium">
+            {Math.min(Math.round(scanProgress), 100)}% complete
+          </p>
+        </div>
       </motion.div>
     )
   }
+
+  const displayConflicts = revealPhase === 'done' ? conflicts : conflicts.slice(0, visibleCount)
+  const isRevealing = revealPhase === 'revealing'
 
   return (
     <motion.div {...fadeUp} transition={{ duration: 0.4 }}>
@@ -1595,7 +1688,7 @@ function ConflictsTab({ stackId }: { stackId: string }) {
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          className="flex gap-3 mb-8 flex-wrap"
+          className="flex items-center gap-3 mb-8 flex-wrap"
         >
           {Object.entries(data.summary).map(([severity, count]) => {
             const sc = severityConfig[severity] || severityConfig.low
@@ -1607,10 +1700,18 @@ function ConflictsTab({ stackId }: { stackId: string }) {
               </div>
             )
           })}
+          {isRevealing && (
+            <div className="flex items-center gap-2 ml-2">
+              <Loader2 className="w-4 h-4 text-apple-gray animate-spin" />
+              <span className="text-[12px] text-apple-gray font-medium">
+                Discovered {visibleCount} of {conflicts.length}...
+              </span>
+            </div>
+          )}
         </motion.div>
       )}
 
-      {conflicts.length === 0 && (
+      {conflicts.length === 0 && revealPhase === 'done' && (
         <div className="text-center py-16">
           <div className="w-16 h-16 rounded-full bg-apple-bg flex items-center justify-center mx-auto mb-4">
             <CheckCircle2 className="w-8 h-8 text-apple-dark" />
@@ -1620,77 +1721,108 @@ function ConflictsTab({ stackId }: { stackId: string }) {
         </div>
       )}
 
-      <motion.div variants={stagger} initial="initial" animate="animate" className="space-y-4">
-        {conflicts.map((conflict: Conflict) => {
-          const sc = severityConfig[conflict.severity] || severityConfig.low
-          return (
-            <motion.div
-              key={conflict.id}
-              variants={fadeUp}
-              transition={{ duration: 0.4 }}
-              className={`bg-white rounded-2xl border border-black/[0.04] p-6 ${sc.weight} hover:shadow-[0_4px_16px_rgba(0,0,0,0.06)] transition-shadow duration-300`}
-            >
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <AlertTriangle className="w-5 h-5 text-apple-dark2" />
-                  <span className="text-[15px] font-semibold text-apple-black capitalize">
-                    {conflict.conflict_type.replace('_', ' ')}
+      <div className="space-y-4">
+        <AnimatePresence>
+          {displayConflicts.map((conflict: Conflict) => {
+            const sc = severityConfig[conflict.severity] || severityConfig.low
+            return (
+              <motion.div
+                key={conflict.id}
+                initial={{ opacity: 0, y: 20, scale: 0.97 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                transition={{ duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] }}
+                className={`bg-white rounded-2xl border border-black/[0.04] p-6 ${sc.weight} hover:shadow-[0_4px_16px_rgba(0,0,0,0.06)] transition-shadow duration-300`}
+              >
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <AlertTriangle className="w-5 h-5 text-apple-dark2" />
+                    <span className="text-[15px] font-semibold text-apple-black capitalize">
+                      {conflict.conflict_type.replace('_', ' ')}
+                    </span>
+                  </div>
+                  <span className="px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-[0.08em] bg-apple-bg text-apple-gray2">
+                    {conflict.severity}
                   </span>
                 </div>
-                <span className="px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-[0.08em] bg-apple-bg text-apple-gray2">
-                  {conflict.severity}
-                </span>
-              </div>
 
-              {/* Source documents badge */}
-              {conflict.evidence && conflict.evidence.length > 0 && (() => {
-                const docs = [...new Set(conflict.evidence.map(e => e.document_label).filter(Boolean))]
-                const isOriginal = docs.length === 1 && docs[0].toLowerCase().includes('original')
-                return docs.length > 0 ? (
-                  <div className="flex items-center gap-2 mb-3 flex-wrap">
-                    <span className="text-[11px] font-semibold text-apple-gray uppercase tracking-wider">
-                      {isOriginal ? 'Present in' : 'Introduced by'}
-                    </span>
-                    {docs.map((doc, j) => (
-                      <span key={j} className={`px-2.5 py-1 rounded-lg text-[12px] font-medium ${
-                        doc.toLowerCase().includes('original') ? 'bg-slate-100 text-slate-600' : 'bg-indigo-50 text-indigo-700'
-                      }`}>
-                        {doc.replace(/\.pdf$/i, '')}
+                {conflict.evidence && conflict.evidence.length > 0 && (() => {
+                  const docs = [...new Set(conflict.evidence.map(e => e.document_label).filter(Boolean))]
+                  const isOriginal = docs.length === 1 && docs[0].toLowerCase().includes('original')
+                  return docs.length > 0 ? (
+                    <div className="flex items-center gap-2 mb-3 flex-wrap">
+                      <span className="text-[11px] font-semibold text-apple-gray uppercase tracking-wider">
+                        {isOriginal ? 'Present in' : 'Introduced by'}
+                      </span>
+                      {docs.map((doc, j) => (
+                        <span key={j} className={`px-2.5 py-1 rounded-lg text-[12px] font-medium ${
+                          doc.toLowerCase().includes('original') ? 'bg-slate-100 text-slate-600' : 'bg-indigo-50 text-indigo-700'
+                        }`}>
+                          {doc.replace(/\.pdf$/i, '')}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null
+                })()}
+
+                <p className="text-[15px] text-apple-dark leading-[1.7] mb-4">{conflict.description}</p>
+
+                {conflict.affected_clauses && conflict.affected_clauses.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-4">
+                    {conflict.affected_clauses.map((clause, j) => (
+                      <span key={j} className="px-2.5 py-1 bg-apple-silver/50 rounded-lg text-[12px] font-mono text-apple-dark2">
+                        {clause}
                       </span>
                     ))}
                   </div>
-                ) : null
-              })()}
+                )}
 
-              <p className="text-[15px] text-apple-dark leading-[1.7] mb-4">{conflict.description}</p>
+                {conflict.recommendation && (
+                  <div className="flex gap-3 bg-apple-offwhite rounded-xl p-4 border border-black/[0.02]">
+                    <Info className="w-4 h-4 text-apple-gray flex-shrink-0 mt-0.5" />
+                    <p className="text-[14px] text-apple-dark2 leading-relaxed">{conflict.recommendation}</p>
+                  </div>
+                )}
 
-              {conflict.affected_clauses && conflict.affected_clauses.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 mb-4">
-                  {conflict.affected_clauses.map((clause, j) => (
-                    <span key={j} className="px-2.5 py-1 bg-apple-silver/50 rounded-lg text-[12px] font-mono text-apple-dark2">
-                      {clause}
-                    </span>
-                  ))}
-                </div>
-              )}
+                {conflict.pain_point_id != null && (
+                  <div className="flex items-center gap-2 mt-3 text-[12px] text-apple-gray">
+                    <Hash className="w-3.5 h-3.5" />
+                    Pain Point {conflict.pain_point_id}
+                  </div>
+                )}
+              </motion.div>
+            )
+          })}
+        </AnimatePresence>
+      </div>
 
-              {conflict.recommendation && (
-                <div className="flex gap-3 bg-apple-offwhite rounded-xl p-4 border border-black/[0.02]">
-                  <Info className="w-4 h-4 text-apple-gray flex-shrink-0 mt-0.5" />
-                  <p className="text-[14px] text-apple-dark2 leading-relaxed">{conflict.recommendation}</p>
-                </div>
-              )}
+      {isRevealing && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="flex items-center justify-center gap-3 py-6"
+        >
+          <motion.div
+            animate={{ scale: [1, 1.2, 1] }}
+            transition={{ duration: 1.5, repeat: Infinity }}
+            className="w-2 h-2 rounded-full bg-apple-dark2"
+          />
+          <span className="text-[13px] text-apple-gray font-medium">Scanning for more conflicts...</span>
+        </motion.div>
+      )}
 
-              {conflict.pain_point_id != null && (
-                <div className="flex items-center gap-2 mt-3 text-[12px] text-apple-gray">
-                  <Hash className="w-3.5 h-3.5" />
-                  Pain Point {conflict.pain_point_id}
-                </div>
-              )}
-            </motion.div>
-          )
-        })}
-      </motion.div>
+      {revealPhase === 'done' && conflicts.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="flex items-center justify-center gap-2 py-6"
+        >
+          <CheckCircle2 className="w-4 h-4 text-apple-dark2" />
+          <span className="text-[13px] text-apple-dark2 font-medium">
+            Scan complete — {conflicts.length} conflict{conflicts.length !== 1 ? 's' : ''} detected across all amendments
+          </span>
+        </motion.div>
+      )}
     </motion.div>
   )
 }
