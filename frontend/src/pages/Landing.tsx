@@ -143,7 +143,7 @@ export default function Landing() {
             transition={{ duration: 0.8, delay: 0.3 }}
             className="text-[56px] sm:text-[80px] lg:text-[96px] font-bold tracking-[-0.03em] text-apple-black leading-[0.95]"
           >
-            Contract Intelligence.
+            Clinical Trial Contracts.
           </motion.h1>
           <motion.h1
             initial={{ opacity: 0, y: 30 }}
@@ -151,7 +151,7 @@ export default function Landing() {
             transition={{ duration: 0.8, delay: 0.45 }}
             className="text-[56px] sm:text-[80px] lg:text-[96px] font-bold tracking-[-0.03em] text-apple-gray leading-[0.95] mt-1"
           >
-            Reimagined.
+            Decoded.
           </motion.h1>
           <motion.p
             initial={{ opacity: 0, y: 20 }}
@@ -159,7 +159,7 @@ export default function Landing() {
             transition={{ duration: 0.6, delay: 0.65 }}
             className="text-[19px] sm:text-[21px] text-apple-gray2 max-w-[640px] mx-auto mt-10 leading-[1.5]"
           >
-            AI-powered analysis for clinical trial agreements. Trace amendments, detect conflicts, and understand the ripple effects of every change.
+            AI-powered truth reconstitution across your entire amendment chain. See what changed, what conflicts, and what it means.
           </motion.p>
           <motion.div
             initial={{ opacity: 0, y: 20 }}
