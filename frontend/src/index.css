@@ -63,3 +63,61 @@ body {
   animation: shimmer 1.5s infinite;
   border-radius: 8px;
 }
+
+.tiptap.ProseMirror {
+  outline: none;
+  padding: 96px;
+  min-height: 1056px;
+  font-family: Calibri, sans-serif;
+  font-size: 11pt;
+  line-height: 1.6;
+  color: #333;
+}
+.tiptap.ProseMirror h2 {
+  font-size: 16px;
+  font-weight: bold;
+  color: #1a1a1a;
+  margin-top: 22px;
+  margin-bottom: 4px;
+}
+.tiptap.ProseMirror h3 {
+  font-size: 14px;
+  font-weight: bold;
+  color: #1a1a1a;
+  margin-top: 14px;
+  margin-bottom: 4px;
+}
+.tiptap.ProseMirror h4 {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin-top: 14px;
+  margin-bottom: 4px;
+}
+.tiptap.ProseMirror p {
+  margin: 0 0 4px 0;
+  white-space: pre-wrap;
+}
+.tiptap.ProseMirror blockquote {
+  border-left: 3px solid #999;
+  padding: 4px 8px;
+  background: #f0f0f0;
+  margin: 4px 0;
+  font-size: 11px;
+  color: #555;
+}
+.tiptap.ProseMirror mark {
+  background: #e8e8e8;
+  padding: 1px 2px;
+  border-radius: 2px;
+}
+.tiptap.ProseMirror ul,
+.tiptap.ProseMirror ol {
+  padding-left: 24px;
+  margin: 4px 0;
+}
+.tiptap.ProseMirror hr {
+  border: none;
+  border-top: 1px solid #d0d0d0;
+  margin: 16px 0;
+}
