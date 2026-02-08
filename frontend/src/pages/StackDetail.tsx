@@ -481,21 +481,21 @@ function ContractHealthSection({ stack }: { stack: any }) {
       id: 1,
       severity: 'high',
       title: 'Insurance Certificate Expiration',
-      description: `${siteName}: Certificate of insurance expires Dec 31, 2024 but study timeline extends to June 2025`,
-      daysRemaining: 90,
+      description: `${siteName}: Certificate of insurance expires Mar 31, 2026 but study timeline extends to September 2026`,
+      daysRemaining: 50,
       category: 'Compliance',
-      detail: `The site's certificate of insurance (COI) for clinical trial liability coverage expires on December 31, 2024. However, per Amendment 5, the study timeline has been extended with anticipated LPLV of June 2025 and site closeout in September 2025. The original CTA §12.1 requires continuous insurance coverage throughout the study period. Immediate action is needed to obtain an updated COI extending coverage through study completion.`,
-      recommendation: 'Contact site to request updated Certificate of Insurance extending coverage through September 2025.',
+      detail: `The site's certificate of insurance (COI) for clinical trial liability coverage expires on March 31, 2026. However, per Amendment 5, the study timeline has been extended with anticipated LPLV of September 2026 and site closeout in December 2026. The original CTA §12.1 requires continuous insurance coverage throughout the study period. Immediate action is needed to obtain an updated COI extending coverage through study completion.`,
+      recommendation: 'Contact site to request updated Certificate of Insurance extending coverage through December 2026.',
     },
     {
       id: 2,
       severity: 'medium',
       title: 'IRB Approval Approaching Expiry',
-      description: `Current IRB approval valid through March 31, 2025 — continuing review submission required`,
-      daysRemaining: 45,
+      description: `Current IRB approval valid through April 30, 2026 — continuing review submission required`,
+      daysRemaining: 80,
       category: 'Regulatory',
-      detail: `Per Amendment 5 §4.1, the Institution's current IRB approval is valid through March 31, 2025. The study is expected to continue through June 2025 (LPLV). The clause requires "timely continuing review" to maintain approval, but does not define "timely" in specific days. Failure to submit continuing review before expiry would create a gap in IRB coverage, potentially requiring suspension of study activities.`,
-      recommendation: 'Notify site coordinator to submit IRB continuing review at least 30 days before March 31, 2025 expiry.',
+      detail: `Per Amendment 5 §4.1, the Institution's current IRB approval is valid through April 30, 2026. The study is expected to continue through September 2026 (LPLV). The clause requires "timely continuing review" to maintain approval, but does not define "timely" in specific days. Failure to submit continuing review before expiry would create a gap in IRB coverage, potentially requiring suspension of study activities.`,
+      recommendation: 'Notify site coordinator to submit IRB continuing review at least 30 days before April 30, 2026 expiry.',
     },
     {
       id: 3,
@@ -504,17 +504,17 @@ function ContractHealthSection({ stack }: { stack: any }) {
       description: `Protocol Amendment No. 2 consent updates — verify all active subjects re-consented`,
       daysRemaining: null,
       category: 'Compliance',
-      detail: `Amendment 5 §4.1 confirms Protocol Amendment No. 2 was submitted and approved by the IRB on February 28, 2024, and that subjects were re-consented "as necessary." However, the contract does not specify a definitive completion date for re-consent activities or confirm 100% re-consent coverage. A compliance check should verify that all active subjects have signed the updated informed consent form.`,
+      detail: `Amendment 5 §4.1 confirms Protocol Amendment No. 2 was submitted and approved by the IRB on February 28, 2025, and that subjects were re-consented "as necessary." However, the contract does not specify a definitive completion date for re-consent activities or confirm 100% re-consent coverage. A compliance check should verify that all active subjects have signed the updated informed consent form.`,
       recommendation: 'Request site confirmation that all active subjects have been re-consented per Protocol Amendment No. 2.',
     },
   ]
 
   const upcomingEvents = [
-    { label: 'Week 48 biomarker collection window closes', date: 'Q1 2025', icon: Activity },
-    { label: 'IRB continuing review due', date: 'Feb 2025', icon: Shield },
-    { label: 'Anticipated LPLV', date: 'June 2025', icon: Calendar },
-    { label: 'Database lock', date: 'Aug 2025', icon: Layers },
-    { label: 'Site closeout visit', date: 'Sep 2025', icon: CheckCircle2 },
+    { label: 'Week 48 biomarker collection window closes', date: 'Q1 2026', icon: Activity },
+    { label: 'IRB continuing review due', date: 'Mar 2026', icon: Shield },
+    { label: 'Anticipated LPLV', date: 'Sep 2026', icon: Calendar },
+    { label: 'Database lock', date: 'Nov 2026', icon: Layers },
+    { label: 'Site closeout visit', date: 'Dec 2026', icon: CheckCircle2 },
   ]
 
   const regulatoryChanges = [
