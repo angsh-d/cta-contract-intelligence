@@ -1139,6 +1139,7 @@ function QueryTab({ stackId }: { stackId: string }) {
     'What insurance obligations exist?',
     'Who is the current PI?',
     'What are the holdback provisions?',
+    'What are all site reporting deadlines across amendments?',
   ]
 
   const handleSubmit = async (e: React.FormEvent) => {
