@@ -146,3 +146,31 @@ export interface JobStatus {
   created_at?: string;
   updated_at?: string;
 }
+
+export interface ConsolidatedSection {
+  section_number: string;
+  section_title: string;
+  level: number;
+  content: string;
+  is_amended: boolean;
+  amendment_source: string | null;
+  amendment_description: string | null;
+  subsections: ConsolidatedSection[];
+  conflicts?: Array<{
+    conflict_id: string;
+    conflict_type: string;
+    severity: string;
+    description: string;
+    recommendation: string;
+  }>;
+}
+
+export interface ConsolidatedContractResponse {
+  contract_stack_id: string;
+  document_structure: ConsolidatedSection[];
+  metadata: {
+    total_sections: number;
+    amended_sections: number;
+    appendices: string[];
+  };
+}

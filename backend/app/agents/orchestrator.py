@@ -24,6 +24,7 @@ from app.agents.dependency_mapper import DependencyMapperAgent
 from app.agents.ripple_effect import RippleEffectAnalyzerAgent
 from app.agents.query_router import QueryRouter
 from app.agents.truth_synthesizer import TruthSynthesizer
+from app.agents.contract_consolidator import ContractConsolidatorAgent
 from app.exceptions import PipelineError
 from app.models.agent_schemas import (
     AmendmentTrackInput, AmendmentTrackOutput, ClauseDependency,
@@ -250,6 +251,17 @@ class AgentOrchestrator:
             config=AgentConfig(agent_name="truth_synthesizer", llm_role="synthesis",
                                max_output_tokens=8192,
                                temperature=0.1, verification_threshold=0.80),
+            llm_provider=factory.get_for_role("synthesis"),
+            prompt_loader=prompt_loader,
+            fallback_provider=factory.get_fallback_for_role("synthesis"),
+            llm_semaphore=self._llm_semaphore,
+        )
+
+        # Consolidation
+        self.agents["contract_consolidator"] = ContractConsolidatorAgent(
+            config=AgentConfig(agent_name="contract_consolidator", llm_role="synthesis",
+                               max_output_tokens=16000,
+                               temperature=0.1, verification_threshold=0.75),
             llm_provider=factory.get_for_role("synthesis"),
             prompt_loader=prompt_loader,
             fallback_provider=factory.get_fallback_for_role("synthesis"),

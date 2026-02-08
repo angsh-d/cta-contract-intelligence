@@ -43,6 +43,34 @@ import {
   ExternalLink,
   Activity,
   HeartPulse,
+  Bold,
+  Italic,
+  Underline,
+  Strikethrough,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  AlignJustify,
+  List,
+  ListOrdered,
+  Indent,
+  Outdent,
+  Undo2,
+  Redo2,
+  Highlighter,
+  Palette,
+  Scissors,
+  Clipboard,
+  ClipboardPaste,
+  Printer,
+  Save,
+  Type,
+  Minus,
+  Table,
+  Image,
+  Link,
+  Superscript,
+  Subscript,
 } from 'lucide-react'
 import {
   useStack,
@@ -55,10 +83,11 @@ import {
   useRippleEffects,
   useCachedRippleResult,
   useDocumentClauses,
+  useConsolidatedContract,
 } from '../hooks/useApi'
 import ReactMarkdown from 'react-markdown'
 import { api } from '../api/client'
-import type { Conflict, QueryResponse, TimelineEntry, DocumentClause, SourceChainLink, ClauseConflict } from '../types'
+import type { Conflict, QueryResponse, TimelineEntry, DocumentClause, SourceChainLink, ClauseConflict, ConsolidatedSection } from '../types'
 
 pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`
 
@@ -69,6 +98,7 @@ const TABS = [
   { id: 'query', label: 'Query', icon: MessageSquare },
   { id: 'conflicts', label: 'Conflicts', icon: Shield },
   { id: 'ripple', label: 'Ripple Effects', icon: Waves },
+  { id: 'consolidate', label: 'Consolidate', icon: FileText },
 ]
 
 const fadeUp = {
@@ -217,6 +247,7 @@ export default function StackDetail() {
             {activeTab === 'query' && <QueryTab stackId={id} />}
             {activeTab === 'conflicts' && <ConflictsTab stackId={id} />}
             {activeTab === 'ripple' && <RippleTab stackId={id} />}
+            {activeTab === 'consolidate' && <ConsolidateTab stackId={id} />}
           </motion.div>
         </AnimatePresence>
       </div>
@@ -2157,5 +2188,345 @@ function RippleTab({ stackId }: { stackId: string }) {
         </motion.div>
       )}
     </div>
+  )
+}
+
+
+// ── Consolidate Tab — Word-style Editor ──────────────────────
+
+function WordToolbarButton({ icon: Icon, label, active, onClick }: {
+  icon: any; label: string; active?: boolean; onClick?: () => void
+}) {
+  return (
+    <button
+      title={label}
+      onClick={onClick}
+      className={`flex items-center justify-center w-[28px] h-[28px] rounded-[3px] transition-colors
+        ${active
+          ? 'bg-[#d6e4f0] border border-[#a0b8cf]'
+          : 'hover:bg-[#e8ecf0] hover:border hover:border-[#c8cdd2] border border-transparent'
+        }`}
+    >
+      <Icon className="w-[14px] h-[14px] text-[#333]" />
+    </button>
+  )
+}
+
+function WordToolbarSep() {
+  return <div className="w-px h-[20px] bg-[#c8cdd2] mx-[3px]" />
+}
+
+function ConsolidateTab({ stackId }: { stackId: string }) {
+  const { data, isLoading, isError, error } = useConsolidatedContract(stackId)
+  const editorRef = useRef<HTMLDivElement>(null)
+  const [fontSize, setFontSize] = useState('11')
+  const [fontFamily, setFontFamily] = useState('Calibri')
+
+  const execCmd = (cmd: string, value?: string) => {
+    document.execCommand(cmd, false, value)
+    editorRef.current?.focus()
+  }
+
+  const flattenSections = (sections: ConsolidatedSection[], depth: number = 0): Array<{ section: ConsolidatedSection; depth: number }> => {
+    const result: Array<{ section: ConsolidatedSection; depth: number }> = []
+    for (const s of sections) {
+      result.push({ section: s, depth })
+      if (s.subsections?.length) {
+        result.push(...flattenSections(s.subsections, depth + 1))
+      }
+    }
+    return result
+  }
+
+  const buildDocumentHtml = (sections: ConsolidatedSection[]): string => {
+    const flat = flattenSections(sections)
+    let html = ''
+    for (const { section, depth } of flat) {
+      const marginLeft = depth * 36
+      const isAmended = section.is_amended
+
+      // Section heading
+      const headingSize = section.level === 1 ? 16 : section.level === 2 ? 14 : 13
+      const headingWeight = section.level <= 2 ? 'bold' : '600'
+      const headingSpacingTop = section.level === 1 ? 22 : 14
+
+      html += `<div style="margin-top:${headingSpacingTop}px;margin-left:${marginLeft}px;margin-bottom:4px;display:flex;align-items:center;gap:8px;">`
+      html += `<span style="font-size:${headingSize}px;font-weight:${headingWeight};color:#1a1a1a;font-family:Calibri,sans-serif;">${section.section_number}. ${section.section_title}</span>`
+      if (isAmended) {
+        html += `<span style="display:inline-flex;align-items:center;gap:3px;padding:1px 8px;border-radius:3px;font-size:9px;font-weight:600;letter-spacing:0.3px;text-transform:uppercase;background:#fff3cd;color:#856404;border:1px solid #ffc107;">AMENDED</span>`
+      }
+      html += `</div>`
+
+      // Content paragraph
+      if (section.content) {
+        const bgColor = isAmended ? '#fff9e6' : 'transparent'
+        const borderLeft = isAmended ? 'border-left:3px solid #ffc107;padding-left:12px;' : ''
+        html += `<div style="margin-left:${marginLeft}px;margin-bottom:2px;${borderLeft}">`
+        html += `<p style="font-size:11pt;line-height:1.6;color:#333;font-family:Calibri,sans-serif;background:${bgColor};padding:${isAmended ? '4px 6px' : '0'};border-radius:2px;margin:0;white-space:pre-wrap;">${section.content.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>`
+        html += `</div>`
+      }
+
+      // Amendment provenance (as a subtle annotation)
+      if (isAmended && section.amendment_source) {
+        html += `<div style="margin-left:${marginLeft + (section.content ? 15 : 0)}px;margin-top:2px;margin-bottom:6px;font-size:9px;color:#888;font-style:italic;font-family:Calibri,sans-serif;">`
+        html += `Modified by ${section.amendment_source}`
+        if (section.amendment_description) {
+          html += ` — ${section.amendment_description}`
+        }
+        html += `</div>`
+      }
+
+      // Conflict annotations
+      if (section.conflicts?.length) {
+        for (const c of section.conflicts) {
+          html += `<div style="margin-left:${marginLeft}px;margin-top:2px;margin-bottom:4px;padding:4px 8px;background:#fff5f5;border:1px solid #fed7d7;border-radius:3px;font-size:9.5px;color:#c53030;font-family:Calibri,sans-serif;">`
+          html += `<strong style="text-transform:uppercase;font-size:8.5px;letter-spacing:0.3px;">${c.severity}</strong>: ${c.description}`
+          html += `</div>`
+        }
+      }
+    }
+    return html
+  }
+
+  if (isLoading) {
+    return (
+      <motion.div {...fadeUp} className="flex items-center justify-center py-24">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-8 h-8 text-[#4472c4] animate-spin" />
+          <p className="text-[13px] text-[#666] font-[Calibri,sans-serif]">Assembling consolidated contract...</p>
+        </div>
+      </motion.div>
+    )
+  }
+
+  if (isError) {
+    return (
+      <motion.div {...fadeUp} className="flex items-center gap-3 mx-auto max-w-2xl mt-12 px-6 py-4 bg-[#fff5f5] border border-[#fed7d7] rounded">
+        <AlertTriangle className="w-5 h-5 text-[#c53030] flex-shrink-0" />
+        <p className="text-[13px] text-[#c53030] font-[Calibri,sans-serif]">
+          {(error as Error)?.message || 'Failed to load consolidated contract.'}
+        </p>
+      </motion.div>
+    )
+  }
+
+  if (!data) return null
+
+  const { document_structure, metadata } = data
+  const docHtml = buildDocumentHtml(document_structure)
+
+  return (
+    <motion.div {...fadeUp} className="flex flex-col" style={{ margin: '-8px -16px 0', fontFamily: 'Segoe UI, Calibri, sans-serif' }}>
+
+      {/* ── Title bar ────────────────────────────────── */}
+      <div className="flex items-center h-[32px] px-3 gap-2" style={{ background: '#2b579a' }}>
+        <FileText className="w-4 h-4 text-white" />
+        <span className="text-[12px] text-white font-medium tracking-wide">
+          Consolidated_Contract.docx
+        </span>
+        <span className="text-[10px] text-white/50 ml-1">— ContractIQ</span>
+        <div className="flex-1" />
+        <span className="text-[10px] text-white/60">
+          {metadata.amended_sections} of {metadata.total_sections} sections amended
+        </span>
+        <div className="flex items-center gap-1 ml-3">
+          <div className="w-[12px] h-[12px] rounded-sm bg-white/20 flex items-center justify-center">
+            <Minus className="w-[8px] h-[8px] text-white" />
+          </div>
+          <div className="w-[12px] h-[12px] rounded-sm bg-white/20 flex items-center justify-center">
+            <div className="w-[7px] h-[7px] border border-white/90" />
+          </div>
+          <div className="w-[12px] h-[12px] rounded-sm bg-white/20 flex items-center justify-center">
+            <X className="w-[8px] h-[8px] text-white" />
+          </div>
+        </div>
+      </div>
+
+      {/* ── Ribbon tabs row ──────────────────────────── */}
+      <div className="flex items-center h-[28px] px-1 gap-0 border-b border-[#d6d6d6]" style={{ background: '#f3f3f3' }}>
+        {['File', 'Home', 'Insert', 'Design', 'Layout', 'References', 'Review', 'View'].map((tab, i) => (
+          <button
+            key={tab}
+            className={`px-3 h-full text-[11px] transition-colors ${
+              i === 1
+                ? 'bg-white text-[#2b579a] font-semibold border-t-2 border-t-[#2b579a] border-x border-x-[#d6d6d6]'
+                : 'text-[#444] hover:bg-[#e8ecf0]'
+            }`}
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Home ribbon toolbar ──────────────────────── */}
+      <div className="flex items-center gap-[2px] px-2 py-[5px] border-b border-[#d6d6d6] flex-wrap" style={{ background: '#f8f8f8' }}>
+        {/* Clipboard group */}
+        <WordToolbarButton icon={ClipboardPaste} label="Paste" />
+        <WordToolbarButton icon={Scissors} label="Cut" onClick={() => execCmd('cut')} />
+        <WordToolbarButton icon={Clipboard} label="Copy" onClick={() => execCmd('copy')} />
+        <WordToolbarSep />
+
+        {/* Undo / Redo */}
+        <WordToolbarButton icon={Undo2} label="Undo" onClick={() => execCmd('undo')} />
+        <WordToolbarButton icon={Redo2} label="Redo" onClick={() => execCmd('redo')} />
+        <WordToolbarSep />
+
+        {/* Font family */}
+        <select
+          value={fontFamily}
+          onChange={(e) => { setFontFamily(e.target.value); execCmd('fontName', e.target.value) }}
+          className="h-[26px] px-1 text-[11px] border border-[#c8cdd2] rounded-[3px] bg-white text-[#333] w-[120px] focus:outline-none focus:border-[#4472c4]"
+        >
+          {['Calibri', 'Arial', 'Times New Roman', 'Cambria', 'Garamond', 'Georgia', 'Verdana', 'Courier New'].map(f => (
+            <option key={f} value={f} style={{ fontFamily: f }}>{f}</option>
+          ))}
+        </select>
+
+        {/* Font size */}
+        <select
+          value={fontSize}
+          onChange={(e) => { setFontSize(e.target.value); execCmd('fontSize', '3'); }}
+          className="h-[26px] px-1 text-[11px] border border-[#c8cdd2] rounded-[3px] bg-white text-[#333] w-[42px] ml-[2px] focus:outline-none focus:border-[#4472c4]"
+        >
+          {['8', '9', '10', '11', '12', '14', '16', '18', '20', '24', '28', '36', '48', '72'].map(s => (
+            <option key={s} value={s}>{s}</option>
+          ))}
+        </select>
+        <WordToolbarSep />
+
+        {/* Text formatting */}
+        <WordToolbarButton icon={Bold} label="Bold (Ctrl+B)" onClick={() => execCmd('bold')} />
+        <WordToolbarButton icon={Italic} label="Italic (Ctrl+I)" onClick={() => execCmd('italic')} />
+        <WordToolbarButton icon={Underline} label="Underline (Ctrl+U)" onClick={() => execCmd('underline')} />
+        <WordToolbarButton icon={Strikethrough} label="Strikethrough" onClick={() => execCmd('strikeThrough')} />
+        <WordToolbarButton icon={Subscript} label="Subscript" onClick={() => execCmd('subscript')} />
+        <WordToolbarButton icon={Superscript} label="Superscript" onClick={() => execCmd('superscript')} />
+        <WordToolbarSep />
+
+        {/* Highlighting & font color */}
+        <WordToolbarButton icon={Highlighter} label="Text Highlight Color" onClick={() => execCmd('hiliteColor', '#FFFF00')} />
+        <WordToolbarButton icon={Palette} label="Font Color" />
+        <WordToolbarSep />
+
+        {/* Alignment */}
+        <WordToolbarButton icon={AlignLeft} label="Align Left" onClick={() => execCmd('justifyLeft')} />
+        <WordToolbarButton icon={AlignCenter} label="Center" onClick={() => execCmd('justifyCenter')} />
+        <WordToolbarButton icon={AlignRight} label="Align Right" onClick={() => execCmd('justifyRight')} />
+        <WordToolbarButton icon={AlignJustify} label="Justify" onClick={() => execCmd('justifyFull')} />
+        <WordToolbarSep />
+
+        {/* Lists */}
+        <WordToolbarButton icon={List} label="Bullets" onClick={() => execCmd('insertUnorderedList')} />
+        <WordToolbarButton icon={ListOrdered} label="Numbering" onClick={() => execCmd('insertOrderedList')} />
+        <WordToolbarButton icon={Outdent} label="Decrease Indent" onClick={() => execCmd('outdent')} />
+        <WordToolbarButton icon={Indent} label="Increase Indent" onClick={() => execCmd('indent')} />
+        <WordToolbarSep />
+
+        {/* Insert */}
+        <WordToolbarButton icon={Table} label="Insert Table" />
+        <WordToolbarButton icon={Image} label="Insert Picture" />
+        <WordToolbarButton icon={Link} label="Insert Link" />
+        <WordToolbarSep />
+
+        {/* Actions */}
+        <WordToolbarButton icon={Search} label="Find & Replace" />
+        <WordToolbarButton icon={Printer} label="Print" />
+        <WordToolbarButton icon={Save} label="Save" />
+      </div>
+
+      {/* ── Ruler ────────────────────────────────────── */}
+      <div className="h-[20px] border-b border-[#d6d6d6] flex items-end px-0 overflow-hidden" style={{ background: '#f8f8f8' }}>
+        <div className="relative w-full h-[16px]" style={{ marginLeft: '96px', marginRight: '96px' }}>
+          {/* Ruler background */}
+          <div className="absolute inset-0 bg-white border-x border-[#c0c0c0]" />
+          {/* Ruler ticks */}
+          <div className="absolute inset-0 flex items-end">
+            {Array.from({ length: 17 }, (_, i) => (
+              <div key={i} className="flex-1 relative">
+                <div className="absolute bottom-0 left-0 w-px h-[6px] bg-[#999]" />
+                {i < 16 && (
+                  <span className="absolute bottom-[6px] left-[2px] text-[7px] text-[#666] leading-none select-none">
+                    {i + 1}
+                  </span>
+                )}
+                {/* Half tick */}
+                <div className="absolute bottom-0 left-1/2 w-px h-[4px] bg-[#bbb]" />
+              </div>
+            ))}
+          </div>
+          {/* Indent markers */}
+          <div className="absolute top-0 left-[0px]">
+            <div className="w-0 h-0 border-l-[5px] border-r-[5px] border-t-[5px] border-l-transparent border-r-transparent border-t-[#666]" />
+          </div>
+          <div className="absolute bottom-0 left-[0px]">
+            <div className="w-0 h-0 border-l-[5px] border-r-[5px] border-b-[5px] border-l-transparent border-r-transparent border-b-[#666]" />
+          </div>
+        </div>
+      </div>
+
+      {/* ── Document canvas ──────────────────────────── */}
+      <div
+        className="flex-1 overflow-auto flex justify-center"
+        style={{ background: '#e8e8e8', minHeight: '600px', maxHeight: 'calc(100vh - 320px)' }}
+      >
+        {/* White "paper" page */}
+        <div
+          className="my-6 flex-shrink-0"
+          style={{
+            width: '816px', /* 8.5in at 96dpi */
+            minHeight: '1056px', /* 11in at 96dpi */
+            background: '#ffffff',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.15), 0 0 1px rgba(0,0,0,0.1)',
+          }}
+        >
+          {/* Page content with 1-inch margins */}
+          <div
+            ref={editorRef}
+            contentEditable
+            suppressContentEditableWarning
+            className="outline-none"
+            style={{
+              padding: '96px',
+              minHeight: '1056px',
+              fontFamily: `${fontFamily}, sans-serif`,
+              fontSize: `${fontSize}pt`,
+              lineHeight: '1.6',
+              color: '#333',
+            }}
+            dangerouslySetInnerHTML={{ __html: docHtml }}
+          />
+        </div>
+      </div>
+
+      {/* ── Status bar ───────────────────────────────── */}
+      <div className="flex items-center h-[24px] px-3 border-t border-[#d6d6d6]" style={{ background: '#2b579a' }}>
+        <span className="text-[10px] text-white/80">
+          Page 1 of 1
+        </span>
+        <span className="text-[10px] text-white/50 mx-2">|</span>
+        <span className="text-[10px] text-white/80">
+          {metadata.total_sections} Sections
+        </span>
+        <span className="text-[10px] text-white/50 mx-2">|</span>
+        <span className="text-[10px] text-white/80">
+          {metadata.amended_sections} Amended
+        </span>
+        <div className="flex-1" />
+        {metadata.appendices?.length > 0 && (
+          <span className="text-[10px] text-white/70 mr-3">
+            Appendices: {metadata.appendices.join(', ')}
+          </span>
+        )}
+        <span className="text-[10px] text-white/60">English (US)</span>
+        <div className="flex items-center gap-1 ml-3">
+          {[100, 120, 150].map(z => (
+            <button key={z} className={`text-[9px] px-1 rounded ${z === 100 ? 'text-white bg-white/20' : 'text-white/50 hover:text-white/80'}`}>
+              {z}%
+            </button>
+          ))}
+        </div>
+      </div>
+
+    </motion.div>
   )
 }

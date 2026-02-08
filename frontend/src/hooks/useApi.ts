@@ -79,3 +79,12 @@ export function useCachedRippleResult(stackId: string, change: Record<string, un
     staleTime: Infinity,
   });
 }
+
+export function useConsolidatedContract(stackId: string) {
+  return useQuery({
+    queryKey: ['consolidated', stackId],
+    queryFn: () => api.getConsolidatedContract(stackId),
+    enabled: !!stackId,
+    staleTime: 30 * 60 * 1000, // 30 minutes
+  });
+}

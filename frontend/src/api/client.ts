@@ -7,6 +7,7 @@ import {
   ConflictAnalysis,
   ClauseHistory,
   JobStatus,
+  ConsolidatedContractResponse,
 } from '../types/index';
 
 const BASE = '';
@@ -80,4 +81,7 @@ export const api = {
 
   getDocumentPdfUrl: (stackId: string, documentId: string) =>
     `/api/v1/contract-stacks/${stackId}/documents/${documentId}/pdf`,
+
+  getConsolidatedContract: (stackId: string) =>
+    request<ConsolidatedContractResponse>(`/api/v1/contract-stacks/${stackId}/consolidated`),
 };

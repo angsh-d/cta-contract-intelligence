@@ -1,0 +1,33 @@
+Organize these {total_clauses} resolved contract clauses into a structured document hierarchy.
+
+Each clause below includes its section_number, title, category, and source_chain (showing amendment provenance). A clause with source_chain length > 1 was modified by one or more amendments.
+
+CLAUSES:
+{clauses_json}
+
+Return a JSON object with this structure:
+{{
+  "reasoning": "Your step-by-step analysis of how you organized the document...",
+  "document_structure": [
+    {{
+      "section_number": "1",
+      "section_title": "Definitions",
+      "level": 1,
+      "is_amended": false,
+      "amendment_source": null,
+      "amendment_description": null,
+      "child_sections": ["1.1", "1.2"]
+    }}
+  ],
+  "appendices": ["Exhibit A", "Exhibit B-2"]
+}}
+
+Rules:
+1. Order sections as they would appear in the original CTA document
+2. Set `level` based on section numbering depth: "1" = level 1, "1.1" = level 2, "1.1.1" = level 3, etc. Exhibits/Appendices are level 1
+3. Set `is_amended` to true if the source_chain has more than 1 entry
+4. For amended sections, set `amendment_source` to the label of the LAST document in the source_chain (the most recent amendment)
+5. For amended sections, set `amendment_description` to the change_description from the last source_chain entry
+6. `child_sections` should list section_numbers that are direct children (e.g., "7" has children "7.1", "7.2")
+7. List any exhibits or appendices in the `appendices` array
+8. Include EVERY clause provided — do not omit any

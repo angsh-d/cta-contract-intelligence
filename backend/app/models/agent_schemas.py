@@ -536,6 +536,37 @@ class ReusabilityOutput(BaseModel):
     llm_reasoning: str = ""
 
 
+# ── Contract Consolidation ────────────────────────────────────
+
+class ConsolidatedSection(BaseModel):
+    """A single section in the consolidated contract document."""
+    section_number: str
+    section_title: str
+    level: int = 1
+    content: str = ""
+    is_amended: bool = False
+    amendment_source: Optional[str] = None
+    amendment_description: Optional[str] = None
+    subsections: list["ConsolidatedSection"] = Field(default_factory=list)
+
+
+class ConsolidationInput(BaseModel):
+    """Input to ContractConsolidatorAgent.process()."""
+    model_config = ConfigDict(frozen=True)
+
+    contract_stack_id: UUID
+    clauses: list[dict[str, Any]]
+
+
+class ConsolidationOutput(BaseModel):
+    """Output from ContractConsolidatorAgent.process()."""
+    contract_stack_id: UUID
+    document_structure: list[ConsolidatedSection]
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    llm_reasoning: str = ""
+
+
 # Resolve forward references
 ParsedSection.model_rebuild()
 ConflictDetectionInput.model_rebuild()
+ConsolidatedSection.model_rebuild()

@@ -338,6 +338,97 @@ async def analyze_conflicts(stack_id: str, req: ConflictAnalysisRequest, request
     return {"conflicts": conflicts, "summary": summary}
 
 
+# ── Contract Consolidation ────────────────────────────────────
+
+@router.get("/contract-stacks/{stack_id}/consolidated")
+async def get_consolidated_contract(stack_id: str, request: Request):
+    """Assemble a consolidated view of the contract with all amendments applied."""
+    from app.models.agent_schemas import ConsolidationInput
+
+    orchestrator = _require_orchestrator(request)
+    pool = request.app.state.postgres_pool
+    stack_uuid = _parse_uuid(stack_id, "stack_id")
+
+    # Check cache first
+    cache_key = f"consolidated:{stack_id}"
+    cached = await orchestrator.cache.get(cache_key)
+    if cached:
+        logger.info("Consolidated contract CACHE HIT for %s", stack_id)
+        return json.loads(cached)
+
+    # Fetch all current clauses with source_chain and document info
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT c.section_number, c.section_title, c.current_text, "
+            "c.clause_category, c.source_chain, c.effective_date, "
+            "c.source_document_id, d.filename AS source_filename "
+            "FROM clauses c "
+            "LEFT JOIN documents d ON d.id = c.source_document_id "
+            "WHERE c.contract_stack_id = $1 AND c.is_current = TRUE "
+            "ORDER BY c.section_number",
+            stack_uuid,
+        )
+        # Also fetch conflicts for annotation
+        conflict_rows = await conn.fetch(
+            "SELECT conflict_id, conflict_type, severity, description, "
+            "affected_sections, recommendation "
+            "FROM conflicts WHERE contract_stack_id = $1",
+            stack_uuid,
+        )
+
+    if not rows:
+        raise HTTPException(status_code=404, detail="No resolved clauses found — run the pipeline first")
+
+    # Build clause dicts with parsed source_chain
+    clauses = []
+    for r in rows:
+        raw_chain = r["source_chain"]
+        source_chain = json.loads(raw_chain) if isinstance(raw_chain, str) else (raw_chain or [])
+        clauses.append({
+            "section_number": r["section_number"],
+            "section_title": r["section_title"],
+            "current_text": r["current_text"] or "",
+            "clause_category": r["clause_category"] or "general",
+            "source_chain": source_chain,
+            "effective_date": str(r["effective_date"]) if r["effective_date"] else None,
+            "source_document_id": str(r["source_document_id"]) if r["source_document_id"] else None,
+            "source_filename": r["source_filename"],
+        })
+
+    # Call consolidator agent
+    consolidator = orchestrator.get_agent("contract_consolidator")
+    result = await consolidator.run(ConsolidationInput(
+        contract_stack_id=stack_uuid, clauses=clauses,
+    ))
+
+    result_json = result.model_dump(mode="json")
+    result_json.pop("llm_reasoning", None)
+
+    # Attach conflict info per section
+    conflict_map: dict[str, list[dict]] = {}
+    for cr in conflict_rows:
+        affected = cr["affected_sections"] or []
+        for sec in affected:
+            conflict_map.setdefault(sec, []).append({
+                "conflict_id": cr["conflict_id"],
+                "conflict_type": cr["conflict_type"],
+                "severity": cr["severity"],
+                "description": cr["description"],
+                "recommendation": cr["recommendation"],
+            })
+    def _attach_conflicts(sections: list[dict]) -> None:
+        for section in sections:
+            section["conflicts"] = conflict_map.get(section.get("section_number", ""), [])
+            _attach_conflicts(section.get("subsections", []))
+    _attach_conflicts(result_json.get("document_structure", []))
+
+    # Cache for 30 days
+    await orchestrator.cache.setex(cache_key, 86400 * 30, json.dumps(result_json))
+    await orchestrator.cache.sadd(f"cache_keys:{stack_id}", cache_key)
+
+    return result_json
+
+
 # ── Ripple Effect Analysis ────────────────────────────────────
 
 @router.post("/contract-stacks/{stack_id}/analyze/ripple-effects")
