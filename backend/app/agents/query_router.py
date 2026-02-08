@@ -25,7 +25,20 @@ class QueryRouter(BaseAgent):
         )
         result = await self.call_llm(system_prompt, user_prompt)
 
-        sub_queries = [SubQuery(**sq) for sq in result.get("sub_queries", [])]
+        raw_sqs = result.get("sub_queries", [])
+        sub_queries: list[SubQuery] = []
+        for sq in raw_sqs:
+            if isinstance(sq, dict):
+                qt = sq.get("query_text") or sq.get("text") or sq.get("query") or ""
+                if not qt:
+                    continue
+                qtype = sq.get("query_type", "truth_reconstitution")
+                ents = sq.get("entities", [])
+                try:
+                    sub_queries.append(SubQuery(query_type=qtype, query_text=qt, entities=ents))
+                except Exception:
+                    logger.warning("Skipping malformed sub_query: %s", sq)
+                    continue
 
         query_type_raw = result.get("query_type", "truth_reconstitution")
         try:

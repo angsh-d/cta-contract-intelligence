@@ -18,6 +18,11 @@ COMPOUND QUERIES: If the user asks a question that spans multiple types, decompo
 
 Return sub_queries only when the query genuinely spans multiple types. Simple queries should NOT be decomposed.
 
+Each sub-query object MUST have these exact fields:
+- "query_type": one of "truth_reconstitution", "conflict_detection", "ripple_analysis", "general"
+- "query_text": the text of the sub-query
+- "entities": list of relevant entities
+
 Before producing your final answer, reason step-by-step about your analysis.
 Include your reasoning in the 'reasoning' field of the JSON output.
 
@@ -27,5 +32,11 @@ Return JSON:
   "query_type": "truth_reconstitution|conflict_detection|ripple_analysis|general",
   "entities": ["7.2", "payment terms", "Net 45"],
   "confidence": 0.95,
-  "sub_queries": []
+  "sub_queries": [
+    {{
+      "query_type": "truth_reconstitution",
+      "query_text": "What are the current payment terms?",
+      "entities": ["payment terms"]
+    }}
+  ]
 }}

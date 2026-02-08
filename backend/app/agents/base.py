@@ -199,19 +199,24 @@ class BaseAgent(ABC):
     async def run(self, input_data: Any) -> Any:
         """
         Agentic execution wrapper around process().
-        Applies self-verification and confidence-gated re-processing.
+        Applies self-verification and confidence-gated re-processing (once only).
         """
         output = await self.process(input_data)
         output = await self._verify_output(output, input_data)
 
-        # Confidence-gated re-processing
         confidence = getattr(output, "confidence", None) or getattr(output, "extraction_confidence", None)
         if confidence is not None and confidence < self.config.verification_threshold:
             logger.warning(
                 "Low confidence %.2f (threshold %.2f) for %s — re-processing with self-critique",
                 confidence, self.config.verification_threshold, self.config.agent_name,
             )
-            output = await self._reprocess_with_critique(input_data, output)
+            reprocessed = await self._reprocess_with_critique(input_data, output)
+            reprocessed_confidence = getattr(reprocessed, "confidence", None) or getattr(reprocessed, "extraction_confidence", None)
+            if reprocessed_confidence is not None and reprocessed_confidence > confidence:
+                output = reprocessed
+            else:
+                logger.info("Re-processed output not better (%.2f vs %.2f) for %s — keeping original",
+                           reprocessed_confidence or 0, confidence, self.config.agent_name)
 
         return output
 
