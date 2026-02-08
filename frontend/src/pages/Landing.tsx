@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { motion, useInView, useScroll, useTransform } from 'framer-motion'
+import { motion, AnimatePresence, useInView, useScroll, useTransform } from 'framer-motion'
 import {
   Shield,
   Layers,
@@ -14,6 +14,13 @@ import {
   Network,
   Zap,
   Brain,
+  X,
+  FileText,
+  GitBranch,
+  Eye,
+  Scale,
+  Activity,
+  ChevronRight,
 } from 'lucide-react'
 
 function FadeUp({ children, className = '', delay = 0 }: { children: React.ReactNode; className?: string; delay?: number }) {
@@ -99,11 +106,169 @@ const steps = [
   { num: '04', icon: CheckCircle2, title: 'Decide', description: 'Detect conflicts, analyze ripple effects, and make data-driven decisions with complete, verified contract intelligence.' },
 ]
 
+const agentTiers = [
+  {
+    tier: 'Tier 1',
+    label: 'Ingestion',
+    description: 'Document understanding and structuring',
+    color: 'bg-apple-black',
+    agents: [
+      { name: 'Document Parser', icon: FileText, role: 'Extracts text, tables, and structure from PDF documents using dual-engine parsing (PyMuPDF + pdfplumber)' },
+      { name: 'Amendment Sequencer', icon: GitBranch, role: 'Orders amendments chronologically and links each to its parent CTA, establishing the full amendment chain' },
+      { name: 'Clause Extractor', icon: Search, role: 'Identifies individual clauses, maps section numbers, and tags clause types (financial, regulatory, operational)' },
+    ],
+  },
+  {
+    tier: 'Tier 2',
+    label: 'Reasoning',
+    description: 'Cross-document analysis and resolution',
+    color: 'bg-apple-dark2',
+    agents: [
+      { name: 'Override Resolver', icon: Zap, role: 'Determines which amendment supersedes which clause, resolving conflicts in the amendment chain to establish current truth' },
+      { name: 'Dependency Mapper', icon: Network, role: 'Maps clause-to-clause dependencies across documents, identifying cross-references and obligation chains' },
+      { name: 'Truth Synthesizer', icon: Brain, role: 'Reconstructs the current state of any clause by tracing through the full amendment history with source citations' },
+    ],
+  },
+  {
+    tier: 'Tier 3',
+    label: 'Analysis',
+    description: 'Predictive intelligence and insights',
+    color: 'bg-apple-gray',
+    agents: [
+      { name: 'Conflict Detector', icon: AlertTriangle, role: 'Adversarial scanning for contradictions between clauses across amendments, with severity scoring and impact assessment' },
+      { name: 'Ripple Analyzer', icon: Waves, role: 'Multi-hop cascade analysis tracing downstream impact of proposed changes up to 5 levels deep across all dependencies' },
+      { name: 'Query Router', icon: Eye, role: 'Classifies incoming queries, decomposes complex questions into sub-queries, and orchestrates multi-agent response synthesis' },
+    ],
+  },
+]
+
+function AgentsModal({ onClose }: { onClose: () => void }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.3 }}
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-8"
+      onClick={onClose}
+    >
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 20 }}
+        transition={{ duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] }}
+        className="relative bg-white rounded-3xl max-w-[960px] w-full max-h-[85vh] overflow-y-auto shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="sticky top-0 bg-white/90 backdrop-blur-xl z-10 px-8 sm:px-10 pt-8 pb-6 border-b border-black/[0.04] rounded-t-3xl">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-10 h-10 rounded-xl bg-apple-black flex items-center justify-center">
+                  <Cpu className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-[24px] font-bold text-apple-black tracking-tight">Agentic Architecture</h2>
+                  <p className="text-[13px] text-apple-gray">9 specialized AI agents across 3 tiers</p>
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="w-8 h-8 rounded-full bg-apple-bg hover:bg-apple-silver/60 flex items-center justify-center transition-colors"
+            >
+              <X className="w-4 h-4 text-apple-dark2" />
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2 mt-5">
+            {agentTiers.map((tier, i) => (
+              <div key={tier.tier} className="flex items-center gap-2">
+                <div className={`px-3 py-1 rounded-full ${tier.color} text-white text-[11px] font-semibold tracking-wide`}>
+                  {tier.tier} — {tier.label}
+                </div>
+                {i < agentTiers.length - 1 && <ChevronRight className="w-3.5 h-3.5 text-apple-light" />}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="px-8 sm:px-10 py-8 space-y-8">
+          {agentTiers.map((tier, tierIdx) => (
+            <motion.div
+              key={tier.tier}
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.15 + tierIdx * 0.1, duration: 0.5 }}
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className={`w-1.5 h-8 rounded-full ${tier.color}`} />
+                <div>
+                  <h3 className="text-[17px] font-bold text-apple-black tracking-tight">{tier.label} Layer</h3>
+                  <p className="text-[12px] text-apple-gray">{tier.description}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {tier.agents.map((agent, agentIdx) => (
+                  <motion.div
+                    key={agent.name}
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.25 + tierIdx * 0.1 + agentIdx * 0.06, duration: 0.4 }}
+                    className="group bg-apple-bg rounded-2xl p-5 border border-black/[0.04] hover:shadow-[0_4px_16px_rgba(0,0,0,0.06)] hover:border-black/[0.08] transition-all duration-300"
+                  >
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className={`w-9 h-9 rounded-xl ${tier.color} flex items-center justify-center group-hover:scale-105 transition-transform duration-300`}>
+                        <agent.icon className="w-4 h-4 text-white" />
+                      </div>
+                      <h4 className="text-[14px] font-semibold text-apple-black tracking-tight">{agent.name}</h4>
+                    </div>
+                    <p className="text-[12px] text-apple-gray2 leading-[1.6]">{agent.role}</p>
+                  </motion.div>
+                ))}
+              </div>
+            </motion.div>
+          ))}
+
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.7, duration: 0.5 }}
+            className="bg-apple-bg rounded-2xl p-6 border border-black/[0.04]"
+          >
+            <div className="flex items-center gap-3 mb-3">
+              <Activity className="w-5 h-5 text-apple-dark2" />
+              <h4 className="text-[15px] font-semibold text-apple-black">How Agents Collaborate</h4>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <p className="text-[11px] font-semibold text-apple-dark2 uppercase tracking-wider mb-1.5">Input</p>
+                <p className="text-[12px] text-apple-gray2 leading-[1.6]">Upload CTA + amendments. Tier 1 agents parse, sequence, and extract every clause across all documents.</p>
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold text-apple-dark2 uppercase tracking-wider mb-1.5">Reasoning</p>
+                <p className="text-[12px] text-apple-gray2 leading-[1.6]">Tier 2 resolves overrides, maps dependencies, and synthesizes truth — building a complete knowledge graph of the contract stack.</p>
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold text-apple-dark2 uppercase tracking-wider mb-1.5">Output</p>
+                <p className="text-[12px] text-apple-gray2 leading-[1.6]">Tier 3 answers queries with source citations, detects conflicts with severity scores, and predicts ripple effects of proposed changes.</p>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      </motion.div>
+    </motion.div>
+  )
+}
+
 export default function Landing() {
   const heroRef = useRef(null)
   const { scrollYProgress } = useScroll({ target: heroRef, offset: ['start start', 'end start'] })
   const heroOpacity = useTransform(scrollYProgress, [0, 0.5], [1, 0])
   const heroScale = useTransform(scrollYProgress, [0, 0.5], [1, 0.97])
+  const [showAgents, setShowAgents] = useState(false)
 
   return (
     <div className="min-h-screen bg-white">
@@ -123,6 +288,12 @@ export default function Landing() {
           <div className="flex items-center gap-8">
             <a href="#features" className="text-[12px] font-medium text-apple-gray2 hover:text-apple-black transition-colors hidden sm:block">Features</a>
             <a href="#how-it-works" className="text-[12px] font-medium text-apple-gray2 hover:text-apple-black transition-colors hidden sm:block">How It Works</a>
+            <button
+              onClick={() => setShowAgents(true)}
+              className="text-[12px] font-medium text-apple-gray2 hover:text-apple-black transition-colors hidden sm:block"
+            >
+              Agents
+            </button>
             <Link
               to="/dashboard"
               className="px-4 py-1.5 bg-apple-black text-white text-[12px] font-medium rounded-full hover:bg-apple-dark transition-colors"
@@ -132,6 +303,10 @@ export default function Landing() {
           </div>
         </div>
       </nav>
+
+      <AnimatePresence>
+        {showAgents && <AgentsModal onClose={() => setShowAgents(false)} />}
+      </AnimatePresence>
 
       <section ref={heroRef} className="relative min-h-screen flex items-center justify-center px-6 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-white via-apple-offwhite to-apple-bg" />
