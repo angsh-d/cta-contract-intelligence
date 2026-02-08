@@ -42,6 +42,7 @@ import {
   Scale,
   ExternalLink,
   Activity,
+  HeartPulse,
 } from 'lucide-react'
 import {
   useStack,
@@ -63,6 +64,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.vers
 
 const TABS = [
   { id: 'overview', label: 'Overview', icon: Layers },
+  { id: 'health', label: 'Contract Health', icon: HeartPulse },
   { id: 'timeline', label: 'Timeline', icon: GitBranch },
   { id: 'query', label: 'Query', icon: MessageSquare },
   { id: 'conflicts', label: 'Conflicts', icon: Shield },
@@ -210,6 +212,7 @@ export default function StackDetail() {
             transition={{ duration: 0.35, ease: [0.25, 0.46, 0.45, 0.94] }}
           >
             {activeTab === 'overview' && <OverviewTab stackId={id} stack={stack} documents={documents} />}
+            {activeTab === 'health' && <ContractHealthSection stack={stack} />}
             {activeTab === 'timeline' && <TimelineTab stackId={id} />}
             {activeTab === 'query' && <QueryTab stackId={id} />}
             {activeTab === 'conflicts' && <ConflictsTab stackId={id} />}
@@ -411,8 +414,6 @@ function OverviewTab({ stackId, stack, documents }: { stackId: string; stack: an
           />
         )}
       </AnimatePresence>
-
-      <ContractHealthSection stack={stack} />
 
       <AnimatePresence>
         {showUpload && (
