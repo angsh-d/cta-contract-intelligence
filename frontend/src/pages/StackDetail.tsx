@@ -37,6 +37,11 @@ import {
   RefreshCw,
   ChevronDown,
   History,
+  Bell,
+  Calendar,
+  Scale,
+  ExternalLink,
+  Activity,
 } from 'lucide-react'
 import {
   useStack,
@@ -407,6 +412,8 @@ function OverviewTab({ stackId, stack, documents }: { stackId: string; stack: an
         )}
       </AnimatePresence>
 
+      <ContractHealthSection stack={stack} />
+
       <AnimatePresence>
         {showUpload && (
           <>
@@ -460,6 +467,225 @@ function OverviewTab({ stackId, stack, documents }: { stackId: string; stack: an
         )}
       </AnimatePresence>
     </div>
+  )
+}
+
+function ContractHealthSection({ stack }: { stack: any }) {
+  const [expandedAlert, setExpandedAlert] = useState<number | null>(null)
+
+  const studyProtocol = stack?.study_protocol || 'HEARTBEAT-3'
+  const siteName = stack?.site_name || 'Memorial Medical Center'
+
+  const alerts = [
+    {
+      id: 1,
+      severity: 'high',
+      title: 'Insurance Certificate Expiration',
+      description: `${siteName}: Certificate of insurance expires Dec 31, 2024 but study timeline extends to June 2025`,
+      daysRemaining: 90,
+      category: 'Compliance',
+      detail: `The site's certificate of insurance (COI) for clinical trial liability coverage expires on December 31, 2024. However, per Amendment 5, the study timeline has been extended with anticipated LPLV of June 2025 and site closeout in September 2025. The original CTA §12.1 requires continuous insurance coverage throughout the study period. Immediate action is needed to obtain an updated COI extending coverage through study completion.`,
+      recommendation: 'Contact site to request updated Certificate of Insurance extending coverage through September 2025.',
+    },
+    {
+      id: 2,
+      severity: 'medium',
+      title: 'IRB Approval Approaching Expiry',
+      description: `Current IRB approval valid through March 31, 2025 — continuing review submission required`,
+      daysRemaining: 45,
+      category: 'Regulatory',
+      detail: `Per Amendment 5 §4.1, the Institution's current IRB approval is valid through March 31, 2025. The study is expected to continue through June 2025 (LPLV). The clause requires "timely continuing review" to maintain approval, but does not define "timely" in specific days. Failure to submit continuing review before expiry would create a gap in IRB coverage, potentially requiring suspension of study activities.`,
+      recommendation: 'Notify site coordinator to submit IRB continuing review at least 30 days before March 31, 2025 expiry.',
+    },
+    {
+      id: 3,
+      severity: 'low',
+      title: 'Informed Consent Update Pending',
+      description: `Protocol Amendment No. 2 consent updates — verify all active subjects re-consented`,
+      daysRemaining: null,
+      category: 'Compliance',
+      detail: `Amendment 5 §4.1 confirms Protocol Amendment No. 2 was submitted and approved by the IRB on February 28, 2024, and that subjects were re-consented "as necessary." However, the contract does not specify a definitive completion date for re-consent activities or confirm 100% re-consent coverage. A compliance check should verify that all active subjects have signed the updated informed consent form.`,
+      recommendation: 'Request site confirmation that all active subjects have been re-consented per Protocol Amendment No. 2.',
+    },
+  ]
+
+  const upcomingEvents = [
+    { label: 'Week 48 biomarker collection window closes', date: 'Q1 2025', icon: Activity },
+    { label: 'IRB continuing review due', date: 'Feb 2025', icon: Shield },
+    { label: 'Anticipated LPLV', date: 'June 2025', icon: Calendar },
+    { label: 'Database lock', date: 'Aug 2025', icon: Layers },
+    { label: 'Site closeout visit', date: 'Sep 2025', icon: CheckCircle2 },
+  ]
+
+  const regulatoryChanges = [
+    {
+      title: 'Remote monitoring documentation requirements',
+      description: 'Amendment 3 §9.3(d) introduced 21 CFR Part 11 e-signature requirements for remote visits — verify site compliance with electronic signature validation procedures.',
+      affectedSections: 3,
+    },
+  ]
+
+  const severityStyles: Record<string, { bg: string; border: string; dot: string }> = {
+    high: { bg: 'bg-[#f5f5f5]', border: 'border-apple-dark2', dot: 'bg-apple-black' },
+    medium: { bg: 'bg-[#f8f8f8]', border: 'border-apple-gray', dot: 'bg-apple-gray' },
+    low: { bg: 'bg-[#fafafa]', border: 'border-apple-silver', dot: 'bg-apple-light' },
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, delay: 0.35 }}
+      className="space-y-8"
+    >
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-[20px] font-semibold text-apple-black tracking-tight">Contract Health</h3>
+          <p className="text-[13px] text-apple-gray mt-1">Real-time monitoring of compliance, deadlines, and regulatory status</p>
+        </div>
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-apple-bg rounded-full">
+          <Activity className="w-3.5 h-3.5 text-apple-dark2" />
+          <span className="text-[12px] font-medium text-apple-dark2">Live</span>
+        </div>
+      </div>
+
+      <div>
+        <div className="flex items-center gap-2 mb-4">
+          <Bell className="w-4 h-4 text-apple-dark2" />
+          <h4 className="text-[15px] font-semibold text-apple-black">Active Alerts</h4>
+          <span className="text-[11px] font-semibold text-white bg-apple-black px-2 py-0.5 rounded-full">
+            {alerts.length}
+          </span>
+        </div>
+        <div className="space-y-3">
+          {alerts.map((alert) => {
+            const styles = severityStyles[alert.severity]
+            const isExpanded = expandedAlert === alert.id
+            return (
+              <motion.div
+                key={alert.id}
+                layout
+                className={`${styles.bg} rounded-2xl border ${isExpanded ? styles.border : 'border-black/[0.04]'} overflow-hidden transition-colors duration-300`}
+              >
+                <button
+                  onClick={() => setExpandedAlert(isExpanded ? null : alert.id)}
+                  className="w-full text-left px-5 py-4 flex items-start gap-4"
+                >
+                  <div className={`w-2.5 h-2.5 rounded-full ${styles.dot} mt-1.5 shrink-0`} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[14px] font-semibold text-apple-black">{alert.title}</span>
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-apple-dark2 bg-apple-silver/60 px-1.5 py-0.5 rounded">
+                        {alert.category}
+                      </span>
+                    </div>
+                    <p className="text-[13px] text-apple-gray2 mt-1 leading-relaxed">{alert.description}</p>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    {alert.daysRemaining && (
+                      <span className="text-[12px] font-medium text-apple-dark2 bg-white px-2.5 py-1 rounded-lg border border-black/[0.04]">
+                        {alert.daysRemaining}d
+                      </span>
+                    )}
+                    <ChevronDown className={`w-4 h-4 text-apple-light transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
+                  </div>
+                </button>
+                <AnimatePresence>
+                  {isExpanded && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
+                      className="overflow-hidden"
+                    >
+                      <div className="px-5 pb-5 ml-6.5 border-t border-black/[0.04]">
+                        <div className="pt-4 space-y-4">
+                          <div>
+                            <h5 className="text-[12px] font-semibold text-apple-dark2 uppercase tracking-wider mb-2">Analysis</h5>
+                            <p className="text-[13px] text-apple-gray2 leading-relaxed">{alert.detail}</p>
+                          </div>
+                          <div>
+                            <h5 className="text-[12px] font-semibold text-apple-dark2 uppercase tracking-wider mb-2">Recommended Action</h5>
+                            <div className="flex items-start gap-3 bg-white rounded-xl px-4 py-3 border border-black/[0.04]">
+                              <Zap className="w-4 h-4 text-apple-dark2 mt-0.5 shrink-0" />
+                              <p className="text-[13px] text-apple-black font-medium leading-relaxed">{alert.recommendation}</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </motion.div>
+            )
+          })}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div>
+          <div className="flex items-center gap-2 mb-4">
+            <Calendar className="w-4 h-4 text-apple-dark2" />
+            <h4 className="text-[15px] font-semibold text-apple-black">Upcoming Events</h4>
+            <span className="text-[11px] font-semibold text-apple-dark2 bg-apple-bg px-2 py-0.5 rounded-full">
+              {upcomingEvents.length}
+            </span>
+          </div>
+          <div className="space-y-2">
+            {upcomingEvents.map((event, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.4 + i * 0.06, duration: 0.4 }}
+                className="flex items-center gap-3 px-4 py-3 bg-white rounded-xl border border-black/[0.04] hover:shadow-[0_2px_8px_rgba(0,0,0,0.04)] transition-all duration-200"
+              >
+                <div className="w-8 h-8 rounded-lg bg-apple-bg flex items-center justify-center shrink-0">
+                  <event.icon className="w-4 h-4 text-apple-dark2" />
+                </div>
+                <span className="text-[13px] text-apple-black font-medium flex-1">{event.label}</span>
+                <span className="text-[12px] text-apple-gray font-medium bg-apple-bg px-2.5 py-1 rounded-lg">{event.date}</span>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <div className="flex items-center gap-2 mb-4">
+            <Scale className="w-4 h-4 text-apple-dark2" />
+            <h4 className="text-[15px] font-semibold text-apple-black">Regulatory Watch</h4>
+            <span className="text-[11px] font-semibold text-apple-dark2 bg-apple-bg px-2 py-0.5 rounded-full">
+              {regulatoryChanges.length}
+            </span>
+          </div>
+          <div className="space-y-2">
+            {regulatoryChanges.map((change, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.5 + i * 0.06, duration: 0.4 }}
+                className="bg-white rounded-xl border border-black/[0.04] px-4 py-4 hover:shadow-[0_2px_8px_rgba(0,0,0,0.04)] transition-all duration-200"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-apple-bg flex items-center justify-center shrink-0 mt-0.5">
+                    <ExternalLink className="w-4 h-4 text-apple-dark2" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-semibold text-apple-black">{change.title}</p>
+                    <p className="text-[12px] text-apple-gray2 mt-1.5 leading-relaxed">{change.description}</p>
+                    <span className="inline-block mt-2 text-[11px] font-medium text-apple-dark2 bg-apple-bg px-2 py-0.5 rounded">
+                      {change.affectedSections} sections affected
+                    </span>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </motion.div>
   )
 }
 
