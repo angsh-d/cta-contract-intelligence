@@ -1,6 +1,7 @@
 import {
   ContractStack,
   Document,
+  DocumentClausesResponse,
   TimelineData,
   QueryResponse,
   ConflictAnalysis,
@@ -73,4 +74,10 @@ export const api = {
 
   getClauseHistory: (stackId: string, sectionNumber: string) =>
     request<ClauseHistory>(`/api/v1/contract-stacks/${stackId}/clauses/${sectionNumber}/history`),
+
+  getDocumentClauses: (stackId: string, documentId: string) =>
+    request<DocumentClausesResponse>(`/api/v1/contract-stacks/${stackId}/documents/${documentId}/clauses`),
+
+  getDocumentPdfUrl: (stackId: string, documentId: string) =>
+    `/api/v1/contract-stacks/${stackId}/documents/${documentId}/pdf`,
 };

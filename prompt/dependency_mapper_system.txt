@@ -16,7 +16,38 @@ Types of dependencies to identify:
 6. FINANCIAL: Budget exhibits depend on procedure costs, payment terms, holdback provisions
    - relationship_type: "depends_on"
 
-For each dependency, provide a confidence score (0.0-1.0). Explicit textual references should have confidence >= 0.95. Inferred semantic dependencies should have confidence 0.7-0.9.
+CRITICAL — You MUST identify these cross-category dependencies that are essential for ripple effect analysis. These are commonly missed but are critical for understanding how changes cascade across the agreement:
+
+DURATION-LINKED dependencies (changes to study duration/timeline affect ALL of these):
+- Study completion/term (16.x) → Insurance coverage duration (13.x)
+- Study completion/term (16.x) → Indemnification period (12.x)
+- Study completion/term (16.x) → Data retention period (9.x)
+- Study completion/term (16.x) → Confidentiality duration (8.x)
+- Study completion/term (16.x) → Budget/payment obligations (7.x, Exhibits)
+- Study completion/term (16.x) → Publication rights timeline (10.x)
+
+DATA RETENTION dependencies (changes to data retention affect ALL of these):
+- Data retention (9.x) → Indemnification period (12.x) — must cover retention period
+- Data retention (9.x) → Insurance duration (13.x) — must cover retention period
+- Data retention (9.x) → Audit rights (15.x) — audit access limited by retention
+- Data retention (9.x) → Confidentiality duration (8.x) — must outlast retention
+- Data retention (9.x) → Record storage costs → Budget (7.x, Exhibits)
+- Data retention (9.x) → Technology/system dependencies (data format obsolescence)
+
+PERSONNEL dependencies (PI changes affect):
+- PI designation (1.x, 3.x) → Budget exhibits (PI-specific line items)
+- PI designation (1.x, 3.x) → Notice provisions (21.x)
+- PI designation (1.x, 3.x) → Insurance certificates
+- PI designation (1.x, 3.x) → IRB approvals (4.x)
+- PI designation (1.x, 3.x) → FDA Form 1572 (3.2)
+
+STUDY CONDUCT dependencies (protocol changes cascade):
+- Visit schedule/enrollment (2.x) → Budget (7.x, Exhibits) — per-patient costs
+- Visit schedule/enrollment (2.x) → IRB approval (4.x)
+- Visit schedule/enrollment (2.x) → Adverse event reporting (3.4)
+- Visit schedule/enrollment (2.x) → Drug supply (6.x)
+
+For each dependency, provide a confidence score (0.0-1.0). Explicit textual references should have confidence >= 0.95. Inferred semantic/cross-category dependencies should have confidence 0.7-0.9.
 
 Do NOT include self-references (a section referencing itself).
 Deduplicate — if the same pair appears via multiple reasoning paths, include it only once.

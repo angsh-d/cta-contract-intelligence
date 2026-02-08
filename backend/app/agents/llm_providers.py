@@ -205,7 +205,7 @@ class AzureOpenAIProvider:
         start = time.monotonic()
         kwargs: dict[str, Any] = {
             "model": model,
-            "max_tokens": max_output_tokens,
+            "max_completion_tokens": max_output_tokens,
             "temperature": temperature,
             "messages": [
                 {"role": "system", "content": system_prompt},
@@ -260,7 +260,7 @@ class AzureOpenAIProvider:
 
         response = await client.chat.completions.create(
             model=model,
-            max_tokens=max_output_tokens,
+            max_completion_tokens=max_output_tokens,
             temperature=temperature,
             messages=messages,
             tools=openai_tools,
@@ -444,11 +444,11 @@ class LLMProviderFactory:
     _providers: dict[str, LLMProvider] = {}
 
     ROLE_MAP: dict[str, tuple[str, str]] = {
-        "extraction":        ("claude",       "gemini"),
-        "complex_reasoning": ("claude",       "azure_openai"),
-        "classification":    ("claude",       "gemini"),
+        "extraction":        ("azure_openai", "gemini"),
+        "complex_reasoning": ("azure_openai", "gemini"),
+        "classification":    ("azure_openai", "gemini"),
         "embedding":         ("azure_openai", "gemini"),
-        "synthesis":         ("claude",       "azure_openai"),
+        "synthesis":         ("azure_openai", "gemini"),
     }
 
     @classmethod

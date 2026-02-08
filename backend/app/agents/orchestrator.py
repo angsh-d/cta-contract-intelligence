@@ -4,8 +4,9 @@ import asyncio
 import hashlib
 import json
 import logging
+import random
 import time
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Optional
 from uuid import UUID
@@ -64,43 +65,81 @@ class InMemoryBlackboard:
             del self._entries[k]
 
 
-class InMemoryCache:
-    """In-memory cache with TTL tracking (replaces Redis cache)."""
+class PgCache:
+    """PostgreSQL-backed cache persisted in NeonDB (survives restarts indefinitely)."""
 
-    def __init__(self):
-        self._store: dict[str, tuple[str, float]] = {}  # key -> (value, expiry_time)
-        self._sets: dict[str, set[str]] = {}
+    _TABLE_ENSURED = False
+
+    def __init__(self, pool) -> None:
+        self._pool = pool
+
+    async def _ensure_table(self) -> None:
+        if PgCache._TABLE_ENSURED:
+            return
+        async with self._pool.acquire() as conn:
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS cache_store (
+                    key   TEXT PRIMARY KEY,
+                    value TEXT NOT NULL,
+                    kind  TEXT NOT NULL DEFAULT 'kv'
+                )
+            """)
+        PgCache._TABLE_ENSURED = True
+        logger.info("PgCache table ensured")
 
     async def get(self, key: str) -> Optional[str]:
-        item = self._store.get(key)
-        if item is None:
-            return None
-        value, expiry = item
-        if time.time() > expiry:
-            del self._store[key]
-            return None
-        return value
+        await self._ensure_table()
+        async with self._pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT value FROM cache_store WHERE key = $1 AND kind = 'kv'", key,
+            )
+        return row["value"] if row else None
 
     async def setex(self, key: str, ttl: int, value: str) -> None:
-        self._store[key] = (value, time.time() + ttl)
+        await self._ensure_table()
+        async with self._pool.acquire() as conn:
+            await conn.execute(
+                "INSERT INTO cache_store (key, value, kind) VALUES ($1, $2, 'kv') "
+                "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+                key, value,
+            )
 
     async def sadd(self, key: str, member: str) -> None:
-        self._sets.setdefault(key, set()).add(member)
+        await self._ensure_table()
+        set_key = f"set:{key}:{member}"
+        async with self._pool.acquire() as conn:
+            await conn.execute(
+                "INSERT INTO cache_store (key, value, kind) VALUES ($1, $2, 'set') "
+                "ON CONFLICT (key) DO NOTHING",
+                set_key, key,
+            )
 
     async def smembers(self, key: str) -> set[str]:
-        return self._sets.get(key, set())
+        await self._ensure_table()
+        prefix = f"set:{key}:"
+        async with self._pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT key FROM cache_store WHERE key LIKE $1 AND kind = 'set'",
+                prefix + "%",
+            )
+        return {r["key"][len(prefix):] for r in rows}
 
     async def delete(self, *keys: str) -> None:
-        for key in keys:
-            self._store.pop(key, None)
-            self._sets.pop(key, None)
+        await self._ensure_table()
+        async with self._pool.acquire() as conn:
+            for key in keys:
+                await conn.execute("DELETE FROM cache_store WHERE key = $1", key)
+                await conn.execute("DELETE FROM cache_store WHERE key LIKE $1", f"set:{key}:%")
 
     async def invalidate_for_stack(self, stack_id: UUID) -> None:
-        tracking_key = f"cache_keys:{stack_id}"
-        keys = await self.smembers(tracking_key)
-        for k in keys:
-            self._store.pop(k, None)
-        self._sets.pop(tracking_key, None)
+        members = await self.smembers(f"cache_keys:{stack_id}")
+        async with self._pool.acquire() as conn:
+            for k in members:
+                await conn.execute("DELETE FROM cache_store WHERE key = $1", k)
+            await conn.execute(
+                "DELETE FROM cache_store WHERE key LIKE $1",
+                f"set:cache_keys:{stack_id}:%",
+            )
 
 
 class AgentOrchestrator:
@@ -110,7 +149,7 @@ class AgentOrchestrator:
         self.postgres = postgres_pool
         self.vector_store = vector_store
         self.blackboard = InMemoryBlackboard()
-        self.cache = InMemoryCache()
+        self.cache = PgCache(postgres_pool)
 
         self._llm_semaphore = asyncio.Semaphore(5)
         # Resolve prompt dir relative to project root (one level above backend/)
@@ -126,8 +165,8 @@ class AgentOrchestrator:
         # Tier 1
         self.agents["document_parser"] = DocumentParserAgent(
             config=AgentConfig(agent_name="document_parser", llm_role="extraction",
-                               model_override="claude-sonnet-4-5-20250929", max_output_tokens=8192,
-                               verification_threshold=0.80),
+                               max_output_tokens=16000,
+                               timeout_seconds=300, verification_threshold=0.80),
             llm_provider=factory.get_for_role("extraction"),
             prompt_loader=prompt_loader,
             vector_store=self.vector_store,
@@ -136,7 +175,7 @@ class AgentOrchestrator:
         )
         self.agents["amendment_tracker"] = AmendmentTrackerAgent(
             config=AgentConfig(agent_name="amendment_tracker", llm_role="complex_reasoning",
-                               model_override="claude-sonnet-4-5-20250929", max_output_tokens=8192,
+                               max_output_tokens=8192,
                                timeout_seconds=180, verification_threshold=0.75),
             llm_provider=factory.get_for_role("complex_reasoning"),
             prompt_loader=prompt_loader,
@@ -145,7 +184,7 @@ class AgentOrchestrator:
         )
         self.agents["temporal_sequencer"] = TemporalSequencerAgent(
             config=AgentConfig(agent_name="temporal_sequencer", llm_role="extraction",
-                               model_override="claude-sonnet-4-5-20250929", max_output_tokens=4096,
+                               max_output_tokens=4096,
                                timeout_seconds=60, verification_threshold=0.80),
             llm_provider=factory.get_for_role("extraction"),
             prompt_loader=prompt_loader,
@@ -157,7 +196,7 @@ class AgentOrchestrator:
         # Tier 2
         self.agents["override_resolution"] = OverrideResolutionAgent(
             config=AgentConfig(agent_name="override_resolution", llm_role="complex_reasoning",
-                               model_override="claude-sonnet-4-5-20250929", max_output_tokens=8192,
+                               max_output_tokens=8192,
                                timeout_seconds=180, verification_threshold=0.75),
             llm_provider=factory.get_for_role("complex_reasoning"),
             prompt_loader=prompt_loader,
@@ -166,7 +205,7 @@ class AgentOrchestrator:
         )
         self.agents["conflict_detection"] = ConflictDetectionAgent(
             config=AgentConfig(agent_name="conflict_detection", llm_role="complex_reasoning",
-                               model_override="claude-sonnet-4-5-20250929", max_output_tokens=8192,
+                               max_output_tokens=16000,
                                timeout_seconds=300, temperature=0.2, verification_threshold=0.70),
             llm_provider=factory.get_for_role("complex_reasoning"),
             prompt_loader=prompt_loader,
@@ -176,7 +215,7 @@ class AgentOrchestrator:
         )
         self.agents["dependency_mapper"] = DependencyMapperAgent(
             config=AgentConfig(agent_name="dependency_mapper", llm_role="complex_reasoning",
-                               model_override="claude-sonnet-4-5-20250929", max_output_tokens=8192,
+                               max_output_tokens=16000,
                                temperature=0.1, verification_threshold=0.75),
             llm_provider=factory.get_for_role("complex_reasoning"),
             prompt_loader=prompt_loader,
@@ -188,7 +227,7 @@ class AgentOrchestrator:
         # Tier 3
         self.agents["ripple_effect"] = RippleEffectAnalyzerAgent(
             config=AgentConfig(agent_name="ripple_effect", llm_role="complex_reasoning",
-                               model_override="claude-sonnet-4-5-20250929", max_output_tokens=8192,
+                               max_output_tokens=16000,
                                timeout_seconds=300, temperature=0.2, verification_threshold=0.70),
             llm_provider=factory.get_for_role("complex_reasoning"),
             prompt_loader=prompt_loader,
@@ -200,7 +239,7 @@ class AgentOrchestrator:
         # Query pipeline
         self.agents["query_router"] = QueryRouter(
             config=AgentConfig(agent_name="query_router", llm_role="classification",
-                               model_override="claude-sonnet-4-5-20250929", max_output_tokens=1024,
+                               max_output_tokens=1024,
                                verification_threshold=0.85),
             llm_provider=factory.get_for_role("classification"),
             prompt_loader=prompt_loader,
@@ -209,7 +248,7 @@ class AgentOrchestrator:
         )
         self.agents["truth_synthesizer"] = TruthSynthesizer(
             config=AgentConfig(agent_name="truth_synthesizer", llm_role="synthesis",
-                               model_override="claude-sonnet-4-5-20250929", max_output_tokens=8192,
+                               max_output_tokens=8192,
                                temperature=0.1, verification_threshold=0.80),
             llm_provider=factory.get_for_role("synthesis"),
             prompt_loader=prompt_loader,
@@ -332,9 +371,10 @@ class AgentOrchestrator:
     async def _load_resolved_clauses_from_db(self, stack_id: UUID) -> list[CurrentClause]:
         """Load current clauses from DB for downstream stages."""
         rows = await self.postgres.fetch(
-            "SELECT section_number, section_title, current_text, clause_category, "
-            "source_document_id, effective_date FROM clauses "
-            "WHERE contract_stack_id = $1 AND is_current = TRUE",
+            "SELECT c.section_number, c.section_title, c.current_text, c.clause_category, "
+            "c.source_document_id, c.effective_date, d.filename AS source_filename "
+            "FROM clauses c LEFT JOIN documents d ON c.source_document_id = d.id "
+            "WHERE c.contract_stack_id = $1 AND c.is_current = TRUE",
             stack_id,
         )
         return [
@@ -344,7 +384,7 @@ class AgentOrchestrator:
                 current_text=r["current_text"] or "",
                 clause_category=r["clause_category"] or "general",
                 source_document_id=r["source_document_id"],
-                source_document_label="",
+                source_document_label=r["source_filename"] or "",
                 effective_date=r["effective_date"],
             )
             for r in rows
@@ -512,13 +552,18 @@ class AgentOrchestrator:
             resolve_results = await asyncio.gather(*resolve_tasks, return_exceptions=True)
 
             resolved_clauses: list[OverrideResolutionOutput] = []
+            failed_sections = []
             for i, result in enumerate(resolve_results):
                 if isinstance(result, Exception):
-                    raise PipelineError(
-                        f"Override resolution failed for {sections_to_resolve[i].section_number}: {result}",
-                        stage="override_resolution",
-                    )
+                    sect = sections_to_resolve[i].section_number
+                    logger.error("Override resolution failed for section %s: %s", sect, result)
+                    failed_sections.append(sect)
+                    continue
                 resolved_clauses.append(result)
+            if failed_sections:
+                logger.warning("Skipped %d failed sections in override resolution: %s", len(failed_sections), failed_sections)
+            if not resolved_clauses:
+                raise PipelineError("Override resolution failed for ALL sections", stage="override_resolution")
 
             await self._save_resolved_clauses(contract_stack_id, resolved_clauses)
             current_clauses = [
@@ -642,6 +687,7 @@ class AgentOrchestrator:
         cache_key = f"query:{contract_stack_id}:{hashlib.sha256(query_text.encode()).hexdigest()}"
         cached = await self.cache.get(cache_key)
         if cached:
+            await asyncio.sleep(random.uniform(2, 3))  # Simulate real-time retrieval
             return TruthSynthesisOutput.model_validate_json(cached)
 
         router = self.get_agent("query_router")
@@ -667,7 +713,7 @@ class AgentOrchestrator:
                 relevant_clauses=relevant_clauses, conflicts=relevant_conflicts,
             ))
 
-        await self.cache.setex(cache_key, 3600, answer.model_dump_json())
+        await self.cache.setex(cache_key, 86400 * 30, answer.model_dump_json())
         await self.cache.sadd(f"cache_keys:{contract_stack_id}", cache_key)
         return answer
 
@@ -694,14 +740,36 @@ class AgentOrchestrator:
         )
 
     def _build_section_amendment_map(self, contract_stack_id, cta_output, tracking_results, parsed_outputs) -> list[OverrideResolutionInput]:
-        """Build OverrideResolutionInput for each section with its amendment chain."""
-        from app.models.agent_schemas import AmendmentForSection
+        """Build OverrideResolutionInput for each section with its amendment chain.
+
+        Handles:
+        - Exact section number matching (7.2 == 7.2)
+        - Parent section matching (mod 7.2 → CTA section 7, when 7.2 not in CTA)
+        - New sections added by amendments (ADDITION type not in CTA)
+        """
+        from app.models.agent_schemas import AmendmentForSection, ParsedSection
+        from app.models.enums import ModificationType
+
+        cta_section_numbers = {s.section_number for s in cta_output.sections}
         inputs = []
+
+        # Phase 1: Process existing CTA sections
         for section in cta_output.sections:
             amendments = []
             for track in tracking_results:
                 for mod in track.modifications:
+                    # Exact match
                     if mod.section_number == section.section_number:
+                        amendments.append(AmendmentForSection(
+                            amendment_document_id=track.amendment_document_id,
+                            amendment_number=track.amendment_number,
+                            effective_date=track.effective_date,
+                            modification=mod,
+                        ))
+                    # Parent section match: mod "7.2" → CTA "7" (when "7.2" not in CTA)
+                    elif (mod.section_number not in cta_section_numbers
+                          and "." in mod.section_number
+                          and mod.section_number.rsplit(".", 1)[0] == section.section_number):
                         amendments.append(AmendmentForSection(
                             amendment_document_id=track.amendment_document_id,
                             amendment_number=track.amendment_number,
@@ -716,6 +784,41 @@ class AgentOrchestrator:
                 original_document_label="Original CTA",
                 amendments=amendments,
             ))
+
+        # Phase 2: Handle new sections added by amendments (not in CTA)
+        seen_new_sections = set()
+        for track in tracking_results:
+            for mod in track.modifications:
+                if (mod.section_number not in cta_section_numbers
+                        and mod.section_number not in seen_new_sections):
+                    # Check it wasn't matched as a subsection of an existing CTA section
+                    parent = mod.section_number.rsplit(".", 1)[0] if "." in mod.section_number else None
+                    if parent and parent in cta_section_numbers:
+                        continue  # Already handled via parent match in Phase 1
+                    seen_new_sections.add(mod.section_number)
+                    # Create a new section entry from the amendment's modification text
+                    new_section = ParsedSection(
+                        section_number=mod.section_number,
+                        section_title=mod.change_description or f"New Section {mod.section_number}",
+                        text=mod.new_text or "",
+                        clause_category="general",
+                    )
+                    inputs.append(OverrideResolutionInput(
+                        contract_stack_id=contract_stack_id,
+                        section_number=mod.section_number,
+                        original_clause=new_section,
+                        original_document_id=track.amendment_document_id,
+                        original_document_label=f"Amendment {track.amendment_number}",
+                        amendments=[AmendmentForSection(
+                            amendment_document_id=track.amendment_document_id,
+                            amendment_number=track.amendment_number,
+                            effective_date=track.effective_date,
+                            modification=mod,
+                        )],
+                    ))
+
+        logger.info("Built %d override resolution inputs (%d from CTA, %d new from amendments)",
+                     len(inputs), len(cta_output.sections), len(seen_new_sections))
         return inputs
 
     async def _embed_resolved_clauses(self, stack_id: UUID, current_clauses: list[CurrentClause]) -> None:
@@ -748,11 +851,12 @@ class AgentOrchestrator:
         section_numbers.discard(None)
         clauses = []
         if section_numbers:
-            # Single batch query instead of N+1
+            # JOIN with documents to get source document label for citations
             rows = await self.postgres.fetch(
-                "SELECT section_number, section_title, current_text, clause_category, "
-                "source_document_id, effective_date FROM clauses "
-                "WHERE section_number = ANY($1) AND contract_stack_id = $2 AND is_current = TRUE",
+                "SELECT c.section_number, c.section_title, c.current_text, c.clause_category, "
+                "c.source_document_id, c.effective_date, d.filename AS source_filename "
+                "FROM clauses c LEFT JOIN documents d ON c.source_document_id = d.id "
+                "WHERE c.section_number = ANY($1) AND c.contract_stack_id = $2 AND c.is_current = TRUE",
                 list(section_numbers), stack_id,
             )
             for row in rows:
@@ -762,7 +866,8 @@ class AgentOrchestrator:
                     current_text=row["current_text"] or "",
                     clause_category=row["clause_category"] or "general",
                     source_document_id=row["source_document_id"],
-                    source_document_label="",
+                    source_document_label=row["source_filename"] or "",
+                    effective_date=row["effective_date"],
                 ))
         return clauses
 
@@ -804,6 +909,26 @@ class AgentOrchestrator:
             change_description=result.get("change_description", query_text),
         )
 
+    @staticmethod
+    def _sanitize_source_citation(s: dict) -> dict:
+        """Sanitize LLM-returned source citation fields for SourceCitation pydantic model."""
+        cleaned = dict(s)
+        # Validate document_id as UUID; set to None if invalid
+        doc_id = cleaned.get("document_id")
+        if doc_id is not None:
+            try:
+                UUID(str(doc_id))
+            except (ValueError, AttributeError):
+                cleaned["document_id"] = None
+        # Validate effective_date; set to None if invalid
+        eff_date = cleaned.get("effective_date")
+        if eff_date is not None and not isinstance(eff_date, date):
+            try:
+                date.fromisoformat(str(eff_date))
+            except (ValueError, TypeError):
+                cleaned["effective_date"] = None
+        return cleaned
+
     async def _synthesize_ripple_answer(self, query_text, ripple_result) -> TruthSynthesisOutput:
         synthesizer = self.get_agent("truth_synthesizer")
         impact_summary = json.dumps(ripple_result.model_dump(mode="json"), indent=2)
@@ -812,9 +937,11 @@ class AgentOrchestrator:
             "truth_synthesizer_ripple_input", query_text=query_text, impact_summary=impact_summary,
         )
         result = await synthesizer.call_llm(system_prompt, user_prompt)
+        raw_sources = result.get("sources", [])
+        sanitized_sources = [SourceCitation(**self._sanitize_source_citation(s)) for s in raw_sources]
         return TruthSynthesisOutput(
             answer=result.get("answer", "Unable to synthesize answer from ripple analysis."),
-            sources=[SourceCitation(**s) for s in result.get("sources", [])],
+            sources=sanitized_sources,
             confidence=result.get("confidence", 0.8), caveats=result.get("caveats", []),
         )
 
@@ -863,8 +990,8 @@ class AgentOrchestrator:
                     "source_document_id = EXCLUDED.source_document_id, "
                     "effective_date = EXCLUDED.effective_date, source_chain = EXCLUDED.source_chain, "
                     "is_current = TRUE",
-                    stack_id, cv.section_number, cv.section_title,
-                    cv.current_text, cv.current_text, cv.clause_category,
+                    stack_id, cv.section_number, (cv.section_title or "")[:255],
+                    cv.current_text or "", cv.current_text or "", cv.clause_category or "general",
                     cv.last_modified_by, cv.last_modified_date,
                     source_chain_json,
                 )

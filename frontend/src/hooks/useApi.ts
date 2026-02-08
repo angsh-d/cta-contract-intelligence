@@ -50,6 +50,32 @@ export function useConflicts(stackId: string) {
   return useMutation({ mutationFn: (threshold?: string) => api.analyzeConflicts(stackId, threshold) });
 }
 
+export function useDocumentClauses(stackId: string, documentId: string | null) {
+  return useQuery({
+    queryKey: ['documentClauses', stackId, documentId],
+    queryFn: () => api.getDocumentClauses(stackId, documentId!),
+    enabled: !!stackId && !!documentId,
+  });
+}
+
 export function useRippleEffects(stackId: string) {
-  return useMutation({ mutationFn: (change: Record<string, unknown>) => api.analyzeRippleEffects(stackId, change) });
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (change: Record<string, unknown>) => api.analyzeRippleEffects(stackId, change),
+    onSuccess: (data, variables) => {
+      // Cache result in query cache so it persists across tab switches
+      const cacheKey = JSON.stringify(variables);
+      qc.setQueryData(['rippleResult', stackId, cacheKey], data);
+    },
+  });
+}
+
+export function useCachedRippleResult(stackId: string, change: Record<string, unknown> | null) {
+  const cacheKey = change ? JSON.stringify(change) : '';
+  return useQuery({
+    queryKey: ['rippleResult', stackId, cacheKey],
+    queryFn: () => null,
+    enabled: false,  // Never auto-fetch — populated by mutation onSuccess
+    staleTime: Infinity,
+  });
 }

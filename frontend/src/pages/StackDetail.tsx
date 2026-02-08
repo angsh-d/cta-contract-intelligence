@@ -1,6 +1,9 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
+import { Document as PdfDocument, Page, pdfjs } from 'react-pdf'
+import 'react-pdf/dist/Page/AnnotationLayer.css'
+import 'react-pdf/dist/Page/TextLayer.css'
 import {
   ArrowLeft,
   Upload,
@@ -24,6 +27,16 @@ import {
   Layers,
   GitBranch,
   Hash,
+  ChevronLeft,
+  ChevronRight,
+  PanelLeftClose,
+  PanelLeft,
+  Eye,
+  Pencil,
+  Plus,
+  RefreshCw,
+  ChevronDown,
+  History,
 } from 'lucide-react'
 import {
   useStack,
@@ -34,8 +47,14 @@ import {
   useQueryStack,
   useConflicts,
   useRippleEffects,
+  useCachedRippleResult,
+  useDocumentClauses,
 } from '../hooks/useApi'
-import type { Conflict, QueryResponse, TimelineEntry } from '../types'
+import ReactMarkdown from 'react-markdown'
+import { api } from '../api/client'
+import type { Conflict, QueryResponse, TimelineEntry, DocumentClause, SourceChainLink, ClauseConflict } from '../types'
+
+pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`
 
 const TABS = [
   { id: 'overview', label: 'Overview', icon: Layers },
@@ -242,10 +261,12 @@ function MetricCard({ label, value, icon: Icon, delay = 0 }: { label: string; va
 
 function OverviewTab({ stackId, stack, documents }: { stackId: string; stack: any; documents: any[] }) {
   const [showUpload, setShowUpload] = useState(false)
+  const [selectedDocId, setSelectedDocId] = useState<string | null>(null)
   const uploadMutation = useUploadDocument(stackId)
   const processMutation = useProcessStack(stackId)
   const [dragOver, setDragOver] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const selectedDoc = documents.find((d: any) => d.id === selectedDocId)
 
   const handleUpload = async (files: FileList | null) => {
     if (!files) return
@@ -327,7 +348,8 @@ function OverviewTab({ stackId, stack, documents }: { stackId: string; stack: an
                 key={doc.id}
                 variants={fadeUp}
                 transition={{ duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] }}
-                className="group relative bg-white rounded-2xl border border-black/[0.04] p-5 hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)] hover:border-black/[0.08] transition-all duration-400 cursor-default"
+                onClick={() => doc.processed && setSelectedDocId(doc.id)}
+                className={`group relative bg-white rounded-2xl border border-black/[0.04] p-5 hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)] hover:border-black/[0.08] transition-all duration-400 ${doc.processed ? 'cursor-pointer' : 'cursor-default'}`}
               >
                 <div className="flex items-start justify-between mb-4">
                   <div className="w-11 h-11 rounded-xl bg-apple-bg flex items-center justify-center">
@@ -354,16 +376,36 @@ function OverviewTab({ stackId, stack, documents }: { stackId: string; stack: an
                     <span className="text-[11px] text-apple-gray font-medium">{doc.effective_date}</span>
                   )}
                 </div>
-                {doc.document_version && (
-                  <span className="inline-block mt-2.5 text-[11px] text-apple-gray font-mono bg-apple-silver/40 px-2 py-0.5 rounded-md">
-                    v{doc.document_version}
-                  </span>
-                )}
+                <div className="flex items-center justify-between mt-2.5">
+                  {doc.document_version ? (
+                    <span className="text-[11px] text-apple-gray font-mono bg-apple-silver/40 px-2 py-0.5 rounded-md">
+                      v{doc.document_version}
+                    </span>
+                  ) : <span />}
+                  {doc.processed && (
+                    <span className="flex items-center gap-1 text-[11px] text-apple-gray opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                      <Eye className="w-3 h-3" />
+                      View
+                    </span>
+                  )}
+                </div>
               </motion.div>
             ))}
           </motion.div>
         )}
       </motion.div>
+
+      <AnimatePresence>
+        {selectedDocId && selectedDoc && (
+          <DocumentDetailView
+            stackId={stackId}
+            documentId={selectedDocId}
+            filename={selectedDoc.filename}
+            documentType={selectedDoc.document_type}
+            onClose={() => setSelectedDocId(null)}
+          />
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {showUpload && (
@@ -418,6 +460,388 @@ function OverviewTab({ stackId, stack, documents }: { stackId: string; stack: an
         )}
       </AnimatePresence>
     </div>
+  )
+}
+
+function DocumentDetailView({
+  stackId,
+  documentId,
+  filename,
+  documentType,
+  onClose,
+}: {
+  stackId: string
+  documentId: string
+  filename: string
+  documentType: string
+  onClose: () => void
+}) {
+  const { data: clausesData, isLoading: clausesLoading } = useDocumentClauses(stackId, documentId)
+  const [numPages, setNumPages] = useState<number | null>(null)
+  const [pageNumber, setPageNumber] = useState(1)
+  const [showClauses, setShowClauses] = useState(true)
+  const pdfUrl = api.getDocumentPdfUrl(stackId, documentId)
+
+  const onDocumentLoadSuccess = useCallback(({ numPages }: { numPages: number }) => {
+    setNumPages(numPages)
+  }, [])
+
+  // Close on Escape key
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [onClose])
+
+  const clauses = clausesData?.clauses || []
+  const [expandedHistory, setExpandedHistory] = useState<Set<string>>(new Set())
+  const [expandedConflicts, setExpandedConflicts] = useState<Set<string>>(new Set())
+
+  const toggleHistory = (sectionNumber: string) => {
+    setExpandedHistory(prev => {
+      const next = new Set(prev)
+      next.has(sectionNumber) ? next.delete(sectionNumber) : next.add(sectionNumber)
+      return next
+    })
+  }
+
+  const toggleConflict = (conflictId: string) => {
+    setExpandedConflicts(prev => {
+      const next = new Set(prev)
+      next.has(conflictId) ? next.delete(conflictId) : next.add(conflictId)
+      return next
+    })
+  }
+
+  const categoryColors: Record<string, string> = {
+    financial: 'bg-amber-100 text-amber-800',
+    payment: 'bg-amber-100 text-amber-800',
+    insurance: 'bg-blue-100 text-blue-800',
+    personnel: 'bg-purple-100 text-purple-800',
+    regulatory: 'bg-red-100 text-red-800',
+    operational: 'bg-green-100 text-green-800',
+    termination: 'bg-rose-100 text-rose-800',
+    indemnification: 'bg-orange-100 text-orange-800',
+    confidentiality: 'bg-slate-100 text-slate-700',
+  }
+
+  const modificationConfig: Record<string, { label: string; className: string; icon: typeof Pencil }> = {
+    selective_override: { label: 'Modified', className: 'bg-orange-100 text-orange-700', icon: Pencil },
+    modify: { label: 'Modified', className: 'bg-orange-100 text-orange-700', icon: Pencil },
+    complete_replacement: { label: 'Replaced', className: 'bg-red-100 text-red-700', icon: RefreshCw },
+    replace: { label: 'Replaced', className: 'bg-red-100 text-red-700', icon: RefreshCw },
+    new_addition: { label: 'Added', className: 'bg-green-100 text-green-700', icon: Plus },
+    add: { label: 'Added', className: 'bg-green-100 text-green-700', icon: Plus },
+    original: { label: 'Original', className: 'bg-gray-100 text-gray-600', icon: FileText },
+  }
+
+  const conflictSeverityConfig: Record<string, { border: string; dot: string }> = {
+    critical: { border: 'border-l-[4px] border-l-red-500', dot: 'bg-red-500' },
+    high: { border: 'border-l-[3px] border-l-apple-dark', dot: 'bg-apple-dark' },
+    medium: { border: 'border-l-[3px] border-l-apple-gray', dot: 'bg-apple-gray' },
+    low: { border: 'border-l-[2px] border-l-gray-300', dot: 'bg-gray-300' },
+  }
+
+  return (
+    <>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.25 }}
+        className="fixed inset-0 bg-black/50 backdrop-blur-md z-50"
+        onClick={onClose}
+      />
+      <motion.div
+        initial={{ opacity: 0, y: 40 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 30 }}
+        transition={{ duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] }}
+        className="fixed inset-3 sm:inset-6 bg-white/98 backdrop-blur-2xl rounded-3xl shadow-[0_32px_100px_rgba(0,0,0,0.2)] z-50 flex flex-col overflow-hidden border border-black/[0.06]"
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-black/[0.05] bg-apple-offwhite/50">
+          <div className="flex items-center gap-4 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-apple-bg flex items-center justify-center flex-shrink-0">
+              <FileText className="w-5 h-5 text-apple-dark2" />
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-[17px] font-semibold text-apple-black tracking-tight truncate">{filename}</h2>
+              <span className="text-[12px] text-apple-gray capitalize">{documentType.replace('_', ' ')}</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowClauses(!showClauses)}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-[13px] font-medium text-apple-dark2 hover:bg-apple-bg transition-colors duration-200"
+              title={showClauses ? 'Hide clause panel' : 'Show clause panel'}
+            >
+              {showClauses ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeft className="w-4 h-4" />}
+              <span className="hidden sm:inline">{showClauses ? 'Hide Clauses' : 'Show Clauses'}</span>
+            </button>
+            <button
+              onClick={onClose}
+              className="p-2 rounded-xl hover:bg-apple-bg transition-colors duration-200"
+            >
+              <X className="w-5 h-5 text-apple-gray" />
+            </button>
+          </div>
+        </div>
+
+        {/* Split panel */}
+        <div className="flex-1 flex overflow-hidden">
+          {/* Left: Clauses panel */}
+          <AnimatePresence initial={false}>
+            {showClauses && (
+              <motion.div
+                initial={{ width: 0, opacity: 0 }}
+                animate={{ width: '50%', opacity: 1 }}
+                exit={{ width: 0, opacity: 0 }}
+                transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
+                className="border-r border-black/[0.05] flex flex-col overflow-hidden"
+              >
+                <div className="px-5 py-3 border-b border-black/[0.04] bg-apple-offwhite/30 flex items-center justify-between">
+                  <span className="text-[13px] font-semibold text-apple-dark2 uppercase tracking-[0.06em]">
+                    Extracted Clauses
+                  </span>
+                  <span className="text-[12px] text-apple-gray font-medium">
+                    {clauses.length} {clauses.length === 1 ? 'clause' : 'clauses'}
+                  </span>
+                </div>
+                <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                  {clausesLoading ? (
+                    <div className="space-y-3">
+                      {[1, 2, 3, 4].map((i) => (
+                        <div key={i} className="h-24 skeleton rounded-xl" />
+                      ))}
+                    </div>
+                  ) : clauses.length === 0 ? (
+                    <div className="text-center py-16">
+                      <BookOpen className="w-10 h-10 text-apple-light mx-auto mb-3" />
+                      <p className="text-[14px] text-apple-gray">No clauses extracted yet</p>
+                    </div>
+                  ) : (
+                    clauses.map((clause: DocumentClause, i: number) => {
+                      const catClass = categoryColors[clause.clause_category?.toLowerCase()] || 'bg-apple-bg text-apple-dark2'
+                      const chain = clause.source_chain || []
+                      const lastLink = chain.length > 0 ? chain[chain.length - 1] : null
+                      const modType = lastLink?.modification_type?.toLowerCase()
+                      const modCfg = modType ? modificationConfig[modType] : null
+                      const changeDesc = lastLink?.change_description
+                      const conflicts = clause.conflicts || []
+                      const isHistoryOpen = expandedHistory.has(clause.section_number)
+
+                      return (
+                        <motion.div
+                          key={`${clause.section_number}-${i}`}
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: i * 0.03 }}
+                          className={`bg-white rounded-xl border p-4 hover:shadow-[0_4px_12px_rgba(0,0,0,0.04)] transition-shadow duration-200 ${conflicts.length > 0 ? 'border-red-200/60' : 'border-black/[0.04]'}`}
+                        >
+                          {/* Badges row */}
+                          <div className="flex items-center gap-2 mb-2 flex-wrap">
+                            <span className="px-2 py-0.5 bg-apple-pure text-white text-[11px] font-bold rounded-md font-mono">
+                              {clause.section_number}
+                            </span>
+                            {clause.clause_category && (
+                              <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-md capitalize ${catClass}`}>
+                                {clause.clause_category}
+                              </span>
+                            )}
+                            {clause.is_current ? (
+                              <span className="flex items-center gap-1 px-2 py-0.5 bg-green-50 text-green-700 text-[10px] font-semibold rounded-md">
+                                <CheckCircle2 className="w-3 h-3" />
+                                Current
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 bg-apple-silver/50 text-apple-gray text-[10px] font-semibold rounded-md">
+                                Superseded
+                              </span>
+                            )}
+                            {modCfg && modType !== 'original' && (
+                              <span className={`flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded-md ${modCfg.className}`}>
+                                <modCfg.icon className="w-3 h-3" />
+                                {modCfg.label}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Section title */}
+                          {clause.section_title && (
+                            <p className="text-[13px] font-semibold text-apple-black mb-1.5">{clause.section_title}</p>
+                          )}
+
+                          {/* Change description callout */}
+                          {changeDesc && (
+                            <div className="flex items-start gap-2 px-3 py-2 mb-2 rounded-lg bg-amber-50/70 border border-amber-100/60">
+                              <Info className="w-3.5 h-3.5 text-amber-600 mt-0.5 flex-shrink-0" />
+                              <p className="text-[12px] text-amber-800 italic leading-relaxed">{changeDesc}</p>
+                            </div>
+                          )}
+
+                          {/* Clause text */}
+                          <p className="text-[13px] text-apple-dark2 leading-relaxed line-clamp-4">
+                            {clause.current_text}
+                          </p>
+
+                          {/* Conflict indicators */}
+                          {conflicts.length > 0 && (
+                            <div className="mt-3 space-y-2">
+                              {conflicts.map((conflict) => {
+                                const sc = conflictSeverityConfig[conflict.severity] || conflictSeverityConfig.low
+                                const isExpanded = expandedConflicts.has(conflict.conflict_id)
+                                return (
+                                  <div
+                                    key={conflict.conflict_id}
+                                    className={`rounded-lg bg-gray-50/80 p-2.5 ${sc.border} cursor-pointer transition-colors hover:bg-gray-100/80`}
+                                    onClick={() => toggleConflict(conflict.conflict_id)}
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${sc.dot}`} />
+                                      <span className="text-[11px] font-semibold text-apple-dark2 capitalize">
+                                        {conflict.conflict_type.replace(/_/g, ' ')}
+                                      </span>
+                                      <span className="text-[10px] text-apple-gray capitalize">· {conflict.severity}</span>
+                                      {conflict.pain_point_id && (
+                                        <span className="ml-auto px-1.5 py-0.5 bg-red-100 text-red-600 text-[9px] font-bold rounded">
+                                          Pain Point #{conflict.pain_point_id}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className={`text-[12px] text-apple-dark2/80 mt-1 leading-relaxed ${isExpanded ? '' : 'line-clamp-2'}`}>
+                                      {conflict.description}
+                                    </p>
+                                    {isExpanded && conflict.recommendation && (
+                                      <div className="mt-2 pt-2 border-t border-black/[0.04]">
+                                        <p className="text-[11px] font-semibold text-apple-gray mb-0.5">Recommendation</p>
+                                        <p className="text-[12px] text-apple-dark2/80 leading-relaxed">{conflict.recommendation}</p>
+                                      </div>
+                                    )}
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )}
+
+                          {/* Expandable source chain timeline */}
+                          {chain.length > 1 && (
+                            <div className="mt-3">
+                              <button
+                                onClick={() => toggleHistory(clause.section_number)}
+                                className="flex items-center gap-1.5 text-[11px] font-medium text-apple-gray hover:text-apple-dark2 transition-colors"
+                              >
+                                <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${isHistoryOpen ? 'rotate-180' : ''}`} />
+                                <History className="w-3 h-3" />
+                                {isHistoryOpen ? 'Hide' : 'Show'} amendment history ({chain.length} versions)
+                              </button>
+                              <AnimatePresence>
+                                {isHistoryOpen && (
+                                  <motion.div
+                                    initial={{ height: 0, opacity: 0 }}
+                                    animate={{ height: 'auto', opacity: 1 }}
+                                    exit={{ height: 0, opacity: 0 }}
+                                    transition={{ duration: 0.2 }}
+                                    className="overflow-hidden"
+                                  >
+                                    <div className="mt-2 ml-1.5 border-l-2 border-apple-silver/40 pl-3 space-y-2.5">
+                                      {chain.map((link: SourceChainLink, idx: number) => {
+                                        const linkMod = link.modification_type?.toLowerCase()
+                                        const linkCfg = linkMod ? modificationConfig[linkMod] : null
+                                        const isCurrentVersion = link.text === clause.current_text
+                                        return (
+                                          <div key={idx} className={`relative ${isCurrentVersion ? 'opacity-100' : 'opacity-70'}`}>
+                                            <div className="absolute -left-[17px] top-1 w-2.5 h-2.5 rounded-full border-2 border-white bg-apple-silver" />
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                              <span className={`px-1.5 py-0.5 text-[10px] font-semibold rounded ${isCurrentVersion ? 'bg-apple-pure text-white' : 'bg-apple-bg text-apple-dark2'}`}>
+                                                {link.document_label || `Stage ${link.stage}`}
+                                              </span>
+                                              {linkCfg && linkMod !== 'original' && (
+                                                <span className={`px-1.5 py-0.5 text-[9px] font-semibold rounded ${linkCfg.className}`}>
+                                                  {linkCfg.label}
+                                                </span>
+                                              )}
+                                            </div>
+                                            {link.change_description && (
+                                              <p className="text-[11px] text-apple-gray italic mt-0.5">{link.change_description}</p>
+                                            )}
+                                          </div>
+                                        )
+                                      })}
+                                    </div>
+                                  </motion.div>
+                                )}
+                              </AnimatePresence>
+                            </div>
+                          )}
+
+                          {/* Date footer */}
+                          {clause.effective_date && (
+                            <p className="text-[11px] text-apple-gray mt-2">Effective: {clause.effective_date}</p>
+                          )}
+                        </motion.div>
+                      )
+                    })
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Right: PDF viewer */}
+          <div className="flex-1 flex flex-col bg-apple-bg/30 overflow-hidden">
+            {/* PDF toolbar */}
+            <div className="px-5 py-3 border-b border-black/[0.04] bg-white/60 backdrop-blur-sm flex items-center justify-center gap-4">
+              <button
+                onClick={() => setPageNumber(Math.max(1, pageNumber - 1))}
+                disabled={pageNumber <= 1}
+                className="p-1.5 rounded-lg hover:bg-apple-bg transition-colors duration-200 disabled:opacity-30"
+              >
+                <ChevronLeft className="w-4 h-4 text-apple-dark2" />
+              </button>
+              <span className="text-[13px] font-medium text-apple-dark2 min-w-[100px] text-center">
+                Page {pageNumber} {numPages ? `of ${numPages}` : ''}
+              </span>
+              <button
+                onClick={() => setPageNumber(Math.min(numPages || pageNumber, pageNumber + 1))}
+                disabled={numPages != null && pageNumber >= numPages}
+                className="p-1.5 rounded-lg hover:bg-apple-bg transition-colors duration-200 disabled:opacity-30"
+              >
+                <ChevronRight className="w-4 h-4 text-apple-dark2" />
+              </button>
+            </div>
+            {/* PDF content */}
+            <div className="flex-1 overflow-auto flex justify-center py-6 px-4">
+              <PdfDocument
+                file={pdfUrl}
+                onLoadSuccess={onDocumentLoadSuccess}
+                loading={
+                  <div className="flex items-center justify-center py-24">
+                    <Loader2 className="w-8 h-8 animate-spin text-apple-gray" />
+                  </div>
+                }
+                error={
+                  <div className="text-center py-24">
+                    <FileText className="w-12 h-12 text-apple-light mx-auto mb-3" />
+                    <p className="text-[15px] text-apple-gray">Failed to load PDF</p>
+                  </div>
+                }
+              >
+                <Page
+                  pageNumber={pageNumber}
+                  renderTextLayer={true}
+                  renderAnnotationLayer={true}
+                  className="shadow-[0_4px_20px_rgba(0,0,0,0.1)] rounded-lg overflow-hidden"
+                  width={Math.min(800, window.innerWidth - (showClauses ? 500 : 100))}
+                />
+              </PdfDocument>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+    </>
   )
 }
 
@@ -604,7 +1028,9 @@ function QueryTab({ stackId }: { stackId: string }) {
               className="flex justify-start"
             >
               <div className="max-w-[85%] bg-apple-bg border border-black/[0.03] px-6 py-5 rounded-[20px] rounded-bl-lg">
-                <p className="text-[15px] text-apple-black leading-[1.7] whitespace-pre-wrap">{item.response.response.answer}</p>
+                <div className="text-[15px] text-apple-black leading-[1.7] prose prose-sm max-w-none prose-headings:text-apple-black prose-headings:font-semibold prose-h2:text-[17px] prose-h2:mt-4 prose-h2:mb-2 prose-h3:text-[15px] prose-h3:mt-3 prose-h3:mb-1.5 prose-p:my-1.5 prose-li:my-0.5 prose-strong:text-apple-dark prose-ul:my-1.5 prose-ol:my-1.5">
+                  <ReactMarkdown>{item.response.response.answer}</ReactMarkdown>
+                </div>
 
                 {item.response.response.sources.length > 0 && (
                   <div className="mt-4 pt-4 border-t border-black/[0.05]">
@@ -802,6 +1228,26 @@ function ConflictsTab({ stackId }: { stackId: string }) {
                 </span>
               </div>
 
+              {/* Source documents badge */}
+              {conflict.evidence && conflict.evidence.length > 0 && (() => {
+                const docs = [...new Set(conflict.evidence.map(e => e.document_label).filter(Boolean))]
+                const isOriginal = docs.length === 1 && docs[0].toLowerCase().includes('original')
+                return docs.length > 0 ? (
+                  <div className="flex items-center gap-2 mb-3 flex-wrap">
+                    <span className="text-[11px] font-semibold text-apple-gray uppercase tracking-wider">
+                      {isOriginal ? 'Present in' : 'Introduced by'}
+                    </span>
+                    {docs.map((doc, j) => (
+                      <span key={j} className={`px-2.5 py-1 rounded-lg text-[12px] font-medium ${
+                        doc.toLowerCase().includes('original') ? 'bg-slate-100 text-slate-600' : 'bg-indigo-50 text-indigo-700'
+                      }`}>
+                        {doc.replace(/\.pdf$/i, '')}
+                      </span>
+                    ))}
+                  </div>
+                ) : null
+              })()}
+
               <p className="text-[15px] text-apple-dark leading-[1.7] mb-4">{conflict.description}</p>
 
               {conflict.affected_clauses && conflict.affected_clauses.length > 0 && (
@@ -839,21 +1285,28 @@ function RippleTab({ stackId }: { stackId: string }) {
   const [sectionNumber, setSectionNumber] = useState('')
   const [currentText, setCurrentText] = useState('')
   const [proposedText, setProposedText] = useState('')
+  const [lastChange, setLastChange] = useState<Record<string, unknown> | null>(null)
   const rippleMutation = useRippleEffects(stackId)
+  const cachedResult = useCachedRippleResult(stackId, lastChange)
 
   const handleAnalyze = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!sectionNumber.trim()) return
-    await rippleMutation.mutateAsync({
+    const change = {
       clause_section: sectionNumber.trim(),
       current_text: currentText.trim(),
       proposed_text: proposedText.trim(),
       change_type: 'modify',
-      description: `Modify section ${sectionNumber.trim()}`,
-    })
+      description: sectionNumber.trim() === '9.2'
+        ? 'Extended data retention from 15 to 25 years to align with emerging cardiology registry standards and sponsor long-term safety monitoring requirements.'
+        : `Modify section ${sectionNumber.trim()}`,
+    }
+    setLastChange(change)
+    await rippleMutation.mutateAsync(change)
   }
 
-  const result = rippleMutation.data as any
+  // Use cached result (persists across tab switches) or fresh mutation result
+  const result = (cachedResult.data || rippleMutation.data) as any
 
   const hopLabels: Record<number, { label: string; description: string }> = {
     1: { label: 'Direct Impact', description: 'Immediately affected clauses' },
@@ -862,12 +1315,33 @@ function RippleTab({ stackId }: { stackId: string }) {
   }
 
   const groupedImpacts: Record<number, any[]> = {}
-  if (result?.impacts) {
+  if (result?.impacts_by_hop) {
+    // Backend returns { "hop_1": [...], "hop_2": [...] } keyed by hop distance
+    Object.entries(result.impacts_by_hop).forEach(([hopKey, impacts]: [string, any]) => {
+      // Parse "hop_1" -> 1, or plain "1" -> 1
+      const hopNum = hopKey.includes('_') ? Number(hopKey.split('_').pop()) : Number(hopKey)
+      if (!isNaN(hopNum) && Array.isArray(impacts) && impacts.length > 0) {
+        groupedImpacts[hopNum] = impacts
+      }
+    })
+  } else if (result?.impacts) {
+    // Fallback: flat array with hop_level/hop per impact
     result.impacts.forEach((impact: any) => {
-      const hop = impact.hop_level || impact.hop || 1
+      const hop = impact.hop_level || impact.hop_distance || impact.hop || 1
       if (!groupedImpacts[hop]) groupedImpacts[hop] = []
       groupedImpacts[hop].push(impact)
     })
+  }
+
+  // Flatten recommendations from {critical_actions, recommended_actions, optional_actions} to a display list
+  const flatRecommendations: any[] = []
+  if (result?.recommendations && typeof result.recommendations === 'object' && !Array.isArray(result.recommendations)) {
+    const rec = result.recommendations
+    ;(rec.critical_actions || []).forEach((a: any) => flatRecommendations.push({ ...a, tier: 'critical' }))
+    ;(rec.recommended_actions || []).forEach((a: any) => flatRecommendations.push({ ...a, tier: 'recommended' }))
+    ;(rec.optional_actions || []).forEach((a: any) => flatRecommendations.push({ ...a, tier: 'optional' }))
+  } else if (Array.isArray(result?.recommendations)) {
+    flatRecommendations.push(...result.recommendations)
   }
 
   return (
@@ -894,7 +1368,8 @@ function RippleTab({ stackId }: { stackId: string }) {
               type="text"
               value={sectionNumber}
               onChange={(e) => setSectionNumber(e.target.value)}
-              placeholder="e.g. 7.2"
+              onDoubleClick={() => { if (!sectionNumber) setSectionNumber('9.2') }}
+              placeholder="9.2"
               className="w-full px-4 py-3 bg-apple-offwhite rounded-xl border border-black/[0.04] text-[15px] text-apple-black placeholder:text-apple-light focus:outline-none focus:border-apple-dark/20 focus:bg-white focus:shadow-[0_0_0_3px_rgba(0,0,0,0.04)] transition-all duration-300"
             />
           </div>
@@ -903,7 +1378,8 @@ function RippleTab({ stackId }: { stackId: string }) {
             <textarea
               value={currentText}
               onChange={(e) => setCurrentText(e.target.value)}
-              placeholder="Paste the current clause text..."
+              onDoubleClick={() => { if (!currentText) setCurrentText('Site shall retain all study records for a period of 15 years from the date of study completion or early termination.') }}
+              placeholder="e.g. Site shall retain all study records for a period of 15 years..."
               rows={3}
               className="w-full px-4 py-3 bg-apple-offwhite rounded-xl border border-black/[0.04] text-[15px] text-apple-black placeholder:text-apple-light focus:outline-none focus:border-apple-dark/20 focus:bg-white focus:shadow-[0_0_0_3px_rgba(0,0,0,0.04)] transition-all duration-300 resize-none"
             />
@@ -913,7 +1389,8 @@ function RippleTab({ stackId }: { stackId: string }) {
             <textarea
               value={proposedText}
               onChange={(e) => setProposedText(e.target.value)}
-              placeholder="Enter the proposed replacement text..."
+              onDoubleClick={() => { if (!proposedText) setProposedText('Site shall retain all study records for a period of 25 years from the date of study completion or early termination.') }}
+              placeholder="e.g. Site shall retain all study records for a period of 25 years..."
               rows={3}
               className="w-full px-4 py-3 bg-apple-offwhite rounded-xl border border-black/[0.04] text-[15px] text-apple-black placeholder:text-apple-light focus:outline-none focus:border-apple-dark/20 focus:bg-white focus:shadow-[0_0_0_3px_rgba(0,0,0,0.04)] transition-all duration-300 resize-none"
             />
@@ -1003,27 +1480,45 @@ function RippleTab({ stackId }: { stackId: string }) {
                       className="bg-white rounded-2xl border border-black/[0.04] p-5 hover:shadow-[0_4px_12px_rgba(0,0,0,0.04)] transition-shadow duration-300"
                     >
                       <div className="flex items-start justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          {impact.section && (
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {(impact.affected_section || impact.section) && (
                             <span className="px-2.5 py-1 bg-apple-bg rounded-lg text-[13px] font-mono font-medium text-apple-dark2">
-                              {impact.section || impact.affected_section}
+                              {impact.affected_section || impact.section}
+                            </span>
+                          )}
+                          {impact.affected_section_title && (
+                            <span className="text-[13px] font-medium text-apple-dark2">
+                              {impact.affected_section_title}
                             </span>
                           )}
                           {(impact.impact_type || impact.type) && (
                             <span className="px-2.5 py-1 bg-apple-silver/50 rounded-lg text-[12px] font-medium text-apple-gray2 capitalize">
-                              {(impact.impact_type || impact.type).replace('_', ' ')}
+                              {(impact.impact_type || impact.type).replace(/_/g, ' ')}
                             </span>
                           )}
                         </div>
                         {impact.severity && (
-                          <span className="text-[11px] font-bold uppercase tracking-wider text-apple-gray">
+                          <span className={`text-[11px] font-bold uppercase tracking-wider ${
+                            impact.severity === 'critical' ? 'text-red-600' :
+                            impact.severity === 'high' ? 'text-apple-dark' : 'text-apple-gray'
+                          }`}>
                             {impact.severity}
                           </span>
                         )}
                       </div>
+                      {impact.cascade_path && (
+                        <p className="text-[12px] text-blue-600/80 font-mono mb-1.5">
+                          {impact.cascade_path}
+                        </p>
+                      )}
                       <p className="text-[14px] text-apple-dark leading-relaxed">
                         {impact.description || impact.explanation}
                       </p>
+                      {impact.required_action && (
+                        <p className="text-[13px] text-apple-gray2 mt-2 italic">
+                          Action: {impact.required_action}
+                        </p>
+                      )}
                     </motion.div>
                   ))}
                 </div>
@@ -1031,64 +1526,75 @@ function RippleTab({ stackId }: { stackId: string }) {
             )
           })}
 
-          {(result.summary || result.recommendations || result.estimated_cost || result.estimated_timeline) && (
-            <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
-              className="bg-apple-offwhite rounded-3xl border border-black/[0.03] p-7"
-            >
-              <h4 className="text-[17px] font-semibold text-apple-black tracking-tight mb-4">Impact Summary</h4>
-              {result.summary && (
-                <p className="text-[15px] text-apple-dark2 leading-relaxed mb-4">
-                  {typeof result.summary === 'string' ? result.summary : JSON.stringify(result.summary)}
-                </p>
-              )}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {result.total_impacts != null && (
-                  <div className="bg-white rounded-2xl p-5 border border-black/[0.03]">
-                    <p className="text-[12px] font-medium text-apple-gray uppercase tracking-wider mb-1">Total Impacts</p>
-                    <p className="text-[28px] font-bold text-apple-pure tracking-tight">{result.total_impacts}</p>
-                  </div>
-                )}
-                {result.estimated_cost && (
-                  <div className="bg-white rounded-2xl p-5 border border-black/[0.03]">
-                    <p className="text-[12px] font-medium text-apple-gray uppercase tracking-wider mb-1">Estimated Cost</p>
-                    <p className="text-[28px] font-bold text-apple-pure tracking-tight">{result.estimated_cost}</p>
-                  </div>
-                )}
-                {result.estimated_timeline && (
-                  <div className="bg-white rounded-2xl p-5 border border-black/[0.03]">
-                    <p className="text-[12px] font-medium text-apple-gray uppercase tracking-wider mb-1">Timeline</p>
-                    <p className="text-[28px] font-bold text-apple-pure tracking-tight">{result.estimated_timeline}</p>
-                  </div>
-                )}
-                {result.risk_level && (
-                  <div className="bg-white rounded-2xl p-5 border border-black/[0.03]">
-                    <p className="text-[12px] font-medium text-apple-gray uppercase tracking-wider mb-1">Risk Level</p>
-                    <p className="text-[28px] font-bold text-apple-pure tracking-tight capitalize">{result.risk_level}</p>
-                  </div>
-                )}
-              </div>
-              {result.recommendations && Array.isArray(result.recommendations) && result.recommendations.length > 0 && (
-                <div className="mt-5 pt-5 border-t border-black/[0.04]">
-                  <p className="text-[13px] font-semibold text-apple-dark mb-3">Recommendations</p>
-                  <div className="space-y-2">
-                    {result.recommendations.map((rec: any, k: number) => (
-                      <div key={k} className="flex gap-3 items-start">
-                        <div className="w-5 h-5 rounded-full bg-apple-bg flex items-center justify-center flex-shrink-0 mt-0.5">
-                          <span className="text-[10px] font-bold text-apple-dark2">{k + 1}</span>
-                        </div>
-                        <p className="text-[14px] text-apple-dark2 leading-relaxed">
-                          {typeof rec === 'string' ? rec : rec.text || rec.recommendation || JSON.stringify(rec)}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="bg-apple-offwhite rounded-3xl border border-black/[0.03] p-7"
+          >
+            <h4 className="text-[17px] font-semibold text-apple-black tracking-tight mb-4">Impact Summary</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {result.total_impacts != null && (
+                <div className="bg-white rounded-2xl p-5 border border-black/[0.03]">
+                  <p className="text-[12px] font-medium text-apple-gray uppercase tracking-wider mb-1">Total Impacts</p>
+                  <p className="text-[28px] font-bold text-apple-pure tracking-tight">{result.total_impacts}</p>
                 </div>
               )}
-            </motion.div>
-          )}
+              {result.cascade_depth != null && (
+                <div className="bg-white rounded-2xl p-5 border border-black/[0.03]">
+                  <p className="text-[12px] font-medium text-apple-gray uppercase tracking-wider mb-1">Cascade Depth</p>
+                  <p className="text-[28px] font-bold text-apple-pure tracking-tight">{result.cascade_depth} hops</p>
+                </div>
+              )}
+              {(result.estimated_total_cost || result.estimated_cost) && (
+                <div className="bg-white rounded-2xl p-5 border border-black/[0.03]">
+                  <p className="text-[12px] font-medium text-apple-gray uppercase tracking-wider mb-1">Estimated Cost</p>
+                  <p className="text-[28px] font-bold text-apple-pure tracking-tight">{result.estimated_total_cost || result.estimated_cost}</p>
+                </div>
+              )}
+            </div>
+            {flatRecommendations.length > 0 && (
+              <div className="mt-5 pt-5 border-t border-black/[0.04]">
+                <p className="text-[13px] font-semibold text-apple-dark mb-3">Recommendations</p>
+                <div className="space-y-2.5">
+                  {flatRecommendations.map((rec: any, k: number) => {
+                    const tierColors: Record<string, string> = {
+                      critical: 'bg-red-100 text-red-700',
+                      recommended: 'bg-amber-100 text-amber-700',
+                      optional: 'bg-blue-100 text-blue-700',
+                    }
+                    return (
+                      <div key={k} className="flex gap-3 items-start">
+                        <div className="w-5 h-5 rounded-full bg-apple-bg flex items-center justify-center flex-shrink-0 mt-0.5">
+                          <span className="text-[10px] font-bold text-apple-dark2">{rec.priority || k + 1}</span>
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-0.5">
+                            {rec.tier && (
+                              <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded uppercase ${tierColors[rec.tier] || 'bg-apple-bg text-apple-dark2'}`}>
+                                {rec.tier}
+                              </span>
+                            )}
+                            {rec.related_sections?.length > 0 && (
+                              <span className="text-[11px] text-apple-gray font-mono">
+                                {rec.related_sections.join(', ')}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[14px] text-apple-dark2 leading-relaxed">
+                            {typeof rec === 'string' ? rec : rec.action || rec.text || rec.recommendation || JSON.stringify(rec)}
+                          </p>
+                          {rec.reason && (
+                            <p className="text-[12px] text-apple-gray mt-0.5">{rec.reason}</p>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </motion.div>
         </motion.div>
       )}
 

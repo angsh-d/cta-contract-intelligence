@@ -22,7 +22,8 @@ class TruthSynthesizer(BaseAgent):
 
         clauses_text = "\n\n".join(
             f"Section {c.section_number} ({c.section_title}) "
-            f"[Source: {c.source_document_label}, Effective: {c.effective_date}]:\n{c.current_text}"
+            f"[document_id: {c.source_document_id}, document_name: {c.source_document_label}, "
+            f"effective_date: {c.effective_date}]:\n{c.current_text}"
             for c in input_data.relevant_clauses
         )
 

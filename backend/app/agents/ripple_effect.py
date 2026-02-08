@@ -20,6 +20,17 @@ class RippleEffectAnalyzerAgent(BaseAgent):
 
     MAX_SINGLE_IMPACT_COST = 10_000_000  # $10M sanity check
 
+    # Map non-standard LLM severity outputs to valid ConflictSeverity values
+    _SEVERITY_NORMALIZATION = {
+        "moderate": "medium",
+        "med": "medium",
+        "severe": "critical",
+        "minor": "low",
+        "major": "high",
+        "significant": "high",
+        "negligible": "low",
+    }
+
     def __init__(self, config, llm_provider, prompt_loader, db_pool,
                  progress_callback=None, fallback_provider=None,
                  trace_context=None, llm_semaphore=None):
@@ -78,15 +89,19 @@ class RippleEffectAnalyzerAgent(BaseAgent):
         await self._report_progress("graph_traversal", 20,
             f"Found {sum(len(v) for v in grouped_by_hop.values())} affected clauses across {len(grouped_by_hop)} hops")
 
-        # Step 3: Per-hop LLM analysis with early termination
+        # Step 3: Per-hop LLM analysis with early termination and cascade context
         impacts_by_hop: dict[str, list[RippleImpact]] = {}
         all_reasoning = ""
+        accumulated_impacts: list[RippleImpact] = []  # carry forward for cascade
 
         for hop in range(1, 6):
             hop_key = f"hop_{hop}"
             hop_clauses = grouped_by_hop.get(hop, [])
             if not hop_clauses:
                 break
+
+            # Build prior impacts context for cascade reasoning
+            prior_context = self._build_prior_impacts_context(accumulated_impacts, hop)
 
             system_prompt = self.prompts.get("ripple_effect_system")
             user_prompt = self.prompts.get(
@@ -96,6 +111,7 @@ class RippleEffectAnalyzerAgent(BaseAgent):
                 proposed_text=change.proposed_text,
                 hop_number=str(hop),
                 hop_clauses=self._format_hop_clauses(hop_clauses),
+                prior_impacts_context=prior_context,
             )
             result = await self.call_llm(system_prompt, user_prompt)
 
@@ -107,8 +123,12 @@ class RippleEffectAnalyzerAgent(BaseAgent):
             for impact in raw_impacts:
                 impact_data = dict(impact)
                 impact_data["hop_distance"] = hop  # Override any LLM-provided hop_distance
+                # Normalize non-standard severity values from LLM output
+                raw_severity = str(impact_data.get("severity", "medium")).lower().strip()
+                impact_data["severity"] = self._SEVERITY_NORMALIZATION.get(raw_severity, raw_severity)
                 hop_impacts.append(RippleImpact(**impact_data))
             impacts_by_hop[hop_key] = hop_impacts
+            accumulated_impacts.extend(hop_impacts)
 
             await self._report_progress("hop_analysis", 20 + int(50 * hop / 5),
                 f"Analyzed hop {hop}: {len(hop_impacts)} impacts")
@@ -240,6 +260,34 @@ class RippleEffectAnalyzerAgent(BaseAgent):
             hop = path["hop_distance"]
             grouped.setdefault(hop, []).append(path)
         return grouped
+
+    def _build_prior_impacts_context(self, accumulated: list[RippleImpact], current_hop: int) -> str:
+        """Build cascade context from prior hops so the LLM can reason about chains."""
+        if current_hop <= 1:
+            return ""
+        if not accumulated:
+            return (
+                "\nNote: No material impacts were found at prior hops. "
+                "However, the proposed change may still DIRECTLY affect clauses at this hop distance. "
+                "Evaluate each clause for direct impact from the original proposed change.\n"
+            )
+        lines = [
+            "",
+            "IMPORTANT — CASCADE CONTEXT FROM PRIOR HOPS:",
+            "The following impacts were identified at earlier hops. Consider how these impacts",
+            "FLOW THROUGH to the clauses at this hop. A clause at this hop may be affected because",
+            "a prior-hop clause was impacted, and this clause depends on or references it.",
+            "Include a cascade_path showing the chain (e.g., '§9.2 → §9.4 → §12.1').",
+            "",
+        ]
+        for imp in accumulated:
+            path_str = f" [path: {imp.cascade_path}]" if imp.cascade_path else ""
+            lines.append(
+                f"  - Hop {imp.hop_distance}: §{imp.affected_section} ({imp.affected_section_title}) — "
+                f"{imp.impact_type} / {imp.severity.value} — {imp.description}{path_str}"
+            )
+        lines.append("")
+        return "\n".join(lines)
 
     def _format_hop_clauses(self, hop_clauses: list[dict]) -> str:
         parts = []

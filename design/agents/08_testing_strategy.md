@@ -53,7 +53,7 @@ backend/tests/
 │   ├── test_circuit_breaker.py
 │   └── test_error_paths.py          # negative/error path tests
 ├── integration/
-│   ├── conftest.py                  # DB fixtures (PostgreSQL/NeonDB + pgvector, Redis)
+│   ├── conftest.py                  # DB fixtures (PostgreSQL/NeonDB + pgvector)
 │   ├── test_ingestion_pipeline.py
 │   ├── test_query_pipeline.py
 │   └── test_heartbeat3_pain_points.py
@@ -738,7 +738,7 @@ async def test_token_budget_raises_on_overflow(document_parser_agent):
 async def test_provider_auto_failover(mock_llm, mock_fallback_llm, document_parser_agent):
     """When primary provider fails, agent automatically uses fallback."""
     # Primary fails
-    mock_llm.set_always_fail(LLMProviderError("Claude API down", provider="claude"))
+    mock_llm.set_always_fail(LLMProviderError("Azure OpenAI API down", provider="azure_openai"))
     # Fallback succeeds
     mock_fallback_llm.queue_response({"sections": [], "metadata": {}})
     document_parser_agent._fallback_llm = mock_fallback_llm
@@ -900,10 +900,10 @@ async def test_compound_query_decomposition(mock_llm, query_router):
 # backend/tests/unit/test_blackboard.py
 
 @pytest.mark.asyncio
-async def test_blackboard_publish_and_query(redis_client):
+async def test_blackboard_publish_and_query():
     """Blackboard supports publish and query of typed entries."""
-    from app.agents.orchestrator import AgentBlackboard
-    bb = AgentBlackboard(redis_client)
+    from app.agents.orchestrator import InMemoryBlackboard
+    bb = InMemoryBlackboard()
     stack_id = uuid4()
     await bb.publish(stack_id, "amendment_tracker", "buried_change", {"section": "7.2", "detail": "Net 30 → Net 45"})
     entries = await bb.query(stack_id, "buried_change")
@@ -911,10 +911,10 @@ async def test_blackboard_publish_and_query(redis_client):
     assert entries[0]["data"]["section"] == "7.2"
 
 @pytest.mark.asyncio
-async def test_blackboard_clear(redis_client):
+async def test_blackboard_clear():
     """Blackboard clear removes all entries for a stack."""
-    from app.agents.orchestrator import AgentBlackboard
-    bb = AgentBlackboard(redis_client)
+    from app.agents.orchestrator import InMemoryBlackboard
+    bb = InMemoryBlackboard()
     stack_id = uuid4()
     await bb.publish(stack_id, "test", "entry_type", {"key": "value"})
     await bb.clear(stack_id)
@@ -970,16 +970,14 @@ def vector_store(postgres_pool):
 @pytest.fixture
 async def orchestrator(postgres_pool, vector_store, mock_llm):
     """Create an AgentOrchestrator with real DB but mock LLM."""
-    import redis.asyncio as aioredis
-    redis_client = aioredis.from_url("redis://localhost:6379/1")  # DB 1 for tests
+    from app.agents.orchestrator import InMemoryBlackboard, InMemoryCache
     orchestrator = AgentOrchestrator(
         postgres_pool=postgres_pool,
-        redis_client=redis_client,
+        blackboard=InMemoryBlackboard(),
+        cache=InMemoryCache(),
         vector_store=vector_store,
     )
     yield orchestrator
-    await redis_client.flushdb()
-    await redis_client.close()
 ```
 
 ```python
@@ -1225,7 +1223,7 @@ pytest tests/unit/ -v
 pytest tests/unit/test_document_parser.py -v
 pytest tests/unit/test_conflict_detection.py -v
 
-# Run integration tests (requires NeonDB + Redis running)
+# Run integration tests (requires NeonDB running)
 pytest tests/integration/ -v -m integration
 
 # Run HEARTBEAT-3 pain point acceptance tests

@@ -132,7 +132,7 @@ class ClaudeProvider:
 
 ```python
 class AzureOpenAIProvider:
-    """Azure OpenAI (gpt-5-mini deployment)."""
+    """Azure OpenAI (deployment from .env)."""
 
     provider_name: str = "azure_openai"
 
@@ -161,25 +161,30 @@ class AzureOpenAIProvider:
 
     async def complete(self, system_prompt, user_message, *, model=None, max_output_tokens=None, temperature=0.0, response_format=None) -> LLMResponse:
         client = await self._get_client()
-        model = model or self._deployment  # "gpt-5-mini"
+        model = model or self._deployment
         max_output_tokens = max_output_tokens or 16384
         start = time.monotonic()
-        response = await client.chat.completions.create(
-            model=model,
-            max_tokens=max_output_tokens,
-            temperature=temperature,
-            messages=[
+        kwargs: dict[str, Any] = {
+            "model": model,
+            "max_completion_tokens": max_output_tokens,
+            "temperature": temperature,
+            "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_message},
             ],
-            response_format={"type": "json_object"} if response_format == "json" else None,
-        )
+        }
+        if response_format == "json":
+            kwargs["response_format"] = {"type": "json_object"}
+        response = await client.chat.completions.create(**kwargs)
         latency_ms = int((time.monotonic() - start) * 1000)
         content = response.choices[0].message.content or ""
         return LLMResponse(
             success=True,
             content=content,
-            usage={"input_tokens": response.usage.prompt_tokens, "output_tokens": response.usage.completion_tokens},
+            usage={
+                "input_tokens": response.usage.prompt_tokens if response.usage else 0,
+                "output_tokens": response.usage.completion_tokens if response.usage else 0,
+            },
             model=model,
             latency_ms=latency_ms,
             provider=self.provider_name,
@@ -205,6 +210,7 @@ class GeminiProvider:
 
     # Maximum output token limits per model (from CLAUDE.md policy)
     MODEL_MAX_TOKENS: dict[str, int] = {
+        "gemini-3-pro-preview": 65536,
         "gemini-2.5-flash-lite": 65536,
         "gemini-2.5-pro": 65536,
         "gemini-2.0-flash-exp": 8192,
@@ -230,16 +236,17 @@ class GeminiProvider:
 
     async def complete(self, system_prompt, user_message, *, model=None, max_output_tokens=None, temperature=0.0, response_format=None) -> LLMResponse:
         client = await self._get_client()
-        model_name = model or "gemini-2.5-flash-lite"
-        max_output_tokens = max_output_tokens or self.MODEL_MAX_TOKENS.get(model_name, 8192)
+        model_name = model or "gemini-3-pro-preview"
+        max_output_tokens = max_output_tokens or self.MODEL_MAX_TOKENS.get(model_name, 65536)
         start = time.monotonic()
-        config = {
-                "system_instruction": system_prompt,
-                "max_output_tokens": max_output_tokens,
-                "temperature": temperature,
-        }
+        from google.genai import types
+        config = types.GenerateContentConfig(
+            system_instruction=system_prompt,
+            max_output_tokens=max_output_tokens,
+            temperature=temperature,
+        )
         if response_format == "json":
-            config["response_mime_type"] = "application/json"
+            config.response_mime_type = "application/json"
         response = await client.aio.models.generate_content(
             model=model_name,
             contents=user_message,
@@ -250,8 +257,8 @@ class GeminiProvider:
             success=True,
             content=response.text or "",
             usage={
-                "input_tokens": response.usage_metadata.prompt_token_count,
-                "output_tokens": response.usage_metadata.candidates_token_count,
+                "input_tokens": response.usage_metadata.prompt_token_count if response.usage_metadata else 0,
+                "output_tokens": response.usage_metadata.candidates_token_count if response.usage_metadata else 0,
             },
             model=model_name,
             latency_ms=latency_ms,
@@ -282,11 +289,11 @@ class LLMProviderFactory:
 
     # Agent role → (primary_provider, fallback_provider)
     ROLE_MAP: dict[str, tuple[str, str]] = {
-        "extraction":       ("claude",       "gemini"),      # Sonnet for parsing
-        "complex_reasoning":("claude",       "azure_openai"),# Opus for reasoning
-        "classification":   ("claude",       "gemini"),      # Sonnet for routing
-        "embedding":        ("gemini",       "azure_openai"),  # gemini-embedding-001 (is_resolved=TRUE filtering for query-time semantic search via pgvector)
-        "synthesis":        ("claude",       "azure_openai"),# Opus for truth synthesis
+        "extraction":        ("azure_openai", "gemini"),
+        "complex_reasoning": ("azure_openai", "gemini"),
+        "classification":    ("azure_openai", "gemini"),
+        "embedding":         ("azure_openai", "gemini"),
+        "synthesis":         ("azure_openai", "gemini"),
     }
 
     @classmethod
@@ -449,11 +456,12 @@ from typing import Any, Awaitable, Callable, Optional, Union
 from uuid import uuid4
 from pydantic import BaseModel
 
+from app.agents.circuit_breaker import CircuitBreaker
+from app.agents.config import AgentConfig
 from app.agents.llm_providers import LLMProvider, LLMProviderFactory
 from app.agents.prompt_loader import PromptLoader
-from app.agents.config import AgentConfig
-from app.models.agent_schemas import LLMResponse
 from app.exceptions import LLMProviderError, LLMResponseError
+from app.models.agent_schemas import LLMResponse
 
 logger = logging.getLogger(__name__)
 
@@ -474,9 +482,9 @@ def _is_transient(error: Exception) -> bool:
 
 # ── Model context window limits ────────────────────────────────
 MODEL_CONTEXT_LIMITS: dict[str, int] = {
-    "claude-opus-4-5-20250514": 200_000,
     "claude-sonnet-4-5-20250929": 200_000,
-    "gpt-5-mini": 128_000,
+    "gpt-5.2": 128_000,
+    "gemini-3-pro-preview": 1_000_000,
     "gemini-2.5-flash-lite": 1_000_000,
     "gemini-2.5-pro": 1_000_000,
 }
@@ -553,6 +561,9 @@ class BaseAgent(ABC):
         LLM response metadata (tokens, latency, model) for agents that need to report these.
     """
 
+    # Per-provider circuit breakers (shared across all agent instances)
+    _circuit_breakers: dict[str, CircuitBreaker] = {}
+
     def __init__(
         self,
         config: AgentConfig,
@@ -570,6 +581,14 @@ class BaseAgent(ABC):
         self._progress_callback = progress_callback
         self.trace = trace_context
         self._llm_semaphore = llm_semaphore or asyncio.Semaphore(999)
+        self._critique_context: Optional[str] = None  # Set during re-processing
+
+        # Ensure circuit breakers exist for our providers
+        for provider in (llm_provider, fallback_provider):
+            if provider and provider.provider_name not in BaseAgent._circuit_breakers:
+                BaseAgent._circuit_breakers[provider.provider_name] = CircuitBreaker(
+                    provider_name=provider.provider_name
+                )
 
     @abstractmethod
     async def process(self, input_data: Any) -> Any:
@@ -633,11 +652,12 @@ class BaseAgent(ABC):
         )
         critique = await self.call_llm(critique_prompt, critique_user, expect_json=False)
 
-        # Store critique context for the re-run
-        if hasattr(input_data, '_critique_context'):
-            input_data._critique_context = critique
+        # Store on agent instance — subclass process() can check self._critique_context
+        self._critique_context = critique
         logger.info("Re-processing %s with self-critique feedback", self.config.agent_name)
-        return await self.process(input_data)
+        result = await self.process(input_data)
+        self._critique_context = None  # Reset after re-processing
+        return result
 
     # ── LLM call with structured output ────────────────────────
 
@@ -762,11 +782,18 @@ class BaseAgent(ABC):
         response_schema: Optional[type[BaseModel]],
         temperature: float,
     ) -> dict[str, Any] | str:
-        """Execute LLM call with retry logic against a specific provider."""
+        """Execute LLM call with retry logic, circuit breaker, and optional schema validation."""
         prompt_hash = hashlib.sha256(system_prompt.encode()).hexdigest()[:12]
-
-        # If response_schema provided, use structured output via tool_use
         use_structured = response_schema is not None
+        response = None
+
+        # Circuit breaker check
+        cb = BaseAgent._circuit_breakers.get(provider.provider_name)
+        if cb and not await cb.can_execute():
+            raise LLMProviderError(
+                f"Circuit breaker OPEN for {provider.provider_name} — skipping call for {self.config.agent_name}",
+                provider=provider.provider_name,
+            )
 
         last_error: Optional[Exception] = None
         for attempt in range(1, self.config.max_retries + 1):
@@ -776,7 +803,6 @@ class BaseAgent(ABC):
                         "LLM call attempt=%d agent=%s model=%s provider=%s prompt_hash=%s",
                         attempt, self.config.agent_name, model, provider.provider_name, prompt_hash,
                     )
-                    start = time.monotonic()
 
                     if use_structured:
                         # Structured output via tool_use — schema enforcement
@@ -806,9 +832,12 @@ class BaseAgent(ABC):
                             timeout=self.config.timeout_seconds,
                         )
 
-                    call_latency = int((time.monotonic() - start) * 1000)
+                # Circuit breaker — record success
+                if cb:
+                    await cb.record_success()
 
                 # Record trace
+                actual_model = response.model or model or "unknown"
                 if self.trace:
                     self.trace.record_call(LLMCallRecord(
                         call_id=str(uuid4()),
@@ -817,7 +846,7 @@ class BaseAgent(ABC):
                         input_tokens=response.usage.get("input_tokens", 0),
                         output_tokens=response.usage.get("output_tokens", 0),
                         latency_ms=response.latency_ms,
-                        model=model,
+                        model=actual_model,
                         provider=provider.provider_name,
                     ))
 
@@ -833,11 +862,22 @@ class BaseAgent(ABC):
                 if not expect_json and not use_structured:
                     return response.content
 
-                if use_structured:
-                    # Tool-use response: content is already structured JSON from tool input
-                    return self._parse_json_response(response.content)
+                if not response.content or not response.content.strip():
+                    raise ConnectionError(f"Empty LLM response for {self.config.agent_name}")
 
-                return self._parse_json_response(response.content)
+                parsed = self._parse_json_response(response.content)
+
+                # Schema validation when response_schema is provided
+                if response_schema is not None:
+                    try:
+                        response_schema.model_validate(parsed)
+                    except Exception as val_err:
+                        logger.warning(
+                            "Schema validation failed for %s: %s — returning raw parsed dict",
+                            self.config.agent_name, val_err,
+                        )
+
+                return parsed
 
             except json.JSONDecodeError:
                 logger.warning("JSON parse failed for %s, re-prompting once", self.config.agent_name)
@@ -857,6 +897,10 @@ class BaseAgent(ABC):
                     ) from repair_err
 
             except Exception as e:
+                # Circuit breaker — record failure for transient errors
+                if cb and _is_transient(e):
+                    await cb.record_failure()
+
                 if not _is_transient(e):
                     logger.error(
                         "Non-transient LLM error agent=%s error=%s — not retrying",
@@ -917,22 +961,43 @@ class BaseAgent(ABC):
                     timeout=self.config.timeout_seconds,
                 )
 
-            # Check if LLM wants to call tools or is done
-            if hasattr(response, 'tool_calls') and response.tool_calls:
-                for tool_call in response.tool_calls:
-                    tool_result = await self._execute_tool(
-                        tool_call["name"], tool_call["input"]
-                    )
-                    messages.append({
-                        "role": "assistant",
-                        "content": response.content,
-                        "tool_calls": [tool_call],
+            # Record trace for each turn
+            if self.trace:
+                self.trace.record_call(LLMCallRecord(
+                    call_id=str(uuid4()),
+                    agent_name=self.config.agent_name,
+                    prompt_template_hash="tool_use_turn",
+                    input_tokens=response.usage.get("input_tokens", 0),
+                    output_tokens=response.usage.get("output_tokens", 0),
+                    latency_ms=response.latency_ms,
+                    model=model or "unknown",
+                    provider=self.llm.provider_name,
+                ))
+
+            if response.tool_calls:
+                # Build assistant message with text + tool_use blocks (Anthropic format)
+                assistant_content = []
+                if response.content:
+                    assistant_content.append({"type": "text", "text": response.content})
+                for tc in response.tool_calls:
+                    assistant_content.append({
+                        "type": "tool_use",
+                        "id": tc["id"],
+                        "name": tc["name"],
+                        "input": tc["input"],
                     })
-                    messages.append({
-                        "role": "tool",
-                        "tool_use_id": tool_call["id"],
-                        "content": json.dumps(tool_result),
+                messages.append({"role": "assistant", "content": assistant_content})
+
+                # Execute all tool calls and build tool_result blocks
+                tool_results = []
+                for tc in response.tool_calls:
+                    result = await self._execute_tool(tc["name"], tc["input"])
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": tc["id"],
+                        "content": json.dumps(result) if not isinstance(result, str) else result,
                     })
+                messages.append({"role": "user", "content": tool_results})
             else:
                 # LLM is done — parse final response
                 return self._parse_json_response(response.content)
@@ -981,12 +1046,7 @@ class BaseAgent(ABC):
                 )
             last_result = self._parse_json_response(response.content)
 
-            # Check if LLM signals completion (no changes)
-            if last_result.get("_refinement_complete", False) or turn == max_turns - 1:
-                last_result.pop("_refinement_complete", None)
-                return last_result
-
-            # Record trace
+            # Record trace BEFORE checking early return — ensures final turn is always traced
             if self.trace:
                 self.trace.record_call(LLMCallRecord(
                     call_id=str(uuid4()),
@@ -995,9 +1055,13 @@ class BaseAgent(ABC):
                     input_tokens=response.usage.get("input_tokens", 0),
                     output_tokens=response.usage.get("output_tokens", 0),
                     latency_ms=response.latency_ms,
-                    model=model,
+                    model=model or "unknown",
                     provider=self.llm.provider_name,
                 ))
+
+            if last_result.get("_refinement_complete", False) or turn == max_turns - 1:
+                last_result.pop("_refinement_complete", None)
+                return last_result
 
         return last_result
 
@@ -1074,11 +1138,11 @@ class BaseAgent(ABC):
         """Rough token estimate: ~4 chars per token for English text."""
         return len(text) // 4
 
-    def _check_token_budget(self, system_prompt: str, user_message: str, model: str) -> None:
+    def _check_token_budget(self, system_prompt: str, user_message: str, model: Optional[str]) -> None:
         """Warn or raise if input is likely to exceed context window."""
         estimated_input = self._estimate_tokens(system_prompt + user_message)
         max_output = self.config.max_output_tokens or 8192
-        model_limit = MODEL_CONTEXT_LIMITS.get(model, 200_000)
+        model_limit = MODEL_CONTEXT_LIMITS.get(model or "", 200_000)
         total_estimated = estimated_input + max_output
 
         if total_estimated > model_limit:
@@ -1142,7 +1206,7 @@ class AgentConfig:
 
     agent_name: str                           # e.g. "document_parser"
     llm_role: str                             # maps to LLMProviderFactory.ROLE_MAP key
-    model_override: Optional[str] = None      # e.g. "claude-opus-4-5-20250514" to force a specific model
+    model_override: Optional[str] = None      # e.g. "gpt-5.2" to force a specific model
     max_output_tokens: Optional[int] = None   # None → provider default
     max_retries: int = 3                      # total attempts (not retries — 3 means try 3 times)
     timeout_seconds: int = 120                # per-call hard timeout via asyncio.wait_for
@@ -1152,17 +1216,17 @@ class AgentConfig:
 
 ### Default Configs per Agent
 
-| Agent | llm_role | model_override | max_output_tokens | temperature | verification_threshold |
-|-------|----------|----------------|-------------------|-------------|----------------------|
-| DocumentParserAgent | `extraction` | `claude-sonnet-4-5-20250929` | 8192 | 0.0 | 0.80 |
-| AmendmentTrackerAgent | `complex_reasoning` | `claude-opus-4-5-20250514` | 8192 | 0.0 | 0.75 |
-| TemporalSequencerAgent | `extraction` | `claude-sonnet-4-5-20250929` | 4096 | 0.0 | 0.80 |
-| OverrideResolutionAgent | `complex_reasoning` | `claude-opus-4-5-20250514` | 8192 | 0.0 | 0.75 |
-| ConflictDetectionAgent | `complex_reasoning` | `claude-opus-4-5-20250514` | 8192 | 0.2 | 0.70 |
-| DependencyMapperAgent | `complex_reasoning` | `claude-opus-4-5-20250514` | 8192 | 0.1 | 0.75 |
-| RippleEffectAnalyzerAgent | `complex_reasoning` | `claude-opus-4-5-20250514` | 8192 | 0.2 | 0.70 |
-| QueryRouter | `classification` | `claude-sonnet-4-5-20250929` | 1024 | 0.0 | 0.85 |
-| TruthSynthesizer | `synthesis` | `claude-opus-4-5-20250514` | 8192 | 0.1 | 0.80 |
+| Agent | llm_role | model_override | max_output_tokens | timeout_seconds | temperature | verification_threshold |
+|-------|----------|----------------|-------------------|-----------------|-------------|----------------------|
+| DocumentParserAgent | `extraction` | `None` | 16000 | 300 | 0.0 | 0.80 |
+| AmendmentTrackerAgent | `complex_reasoning` | `None` | 8192 | 180 | 0.0 | 0.75 |
+| TemporalSequencerAgent | `extraction` | `None` | 4096 | 60 | 0.0 | 0.80 |
+| OverrideResolutionAgent | `complex_reasoning` | `None` | 8192 | 180 | 0.0 | 0.75 |
+| ConflictDetectionAgent | `complex_reasoning` | `None` | 16000 | 300 | 0.2 | 0.70 |
+| DependencyMapperAgent | `complex_reasoning` | `None` | 16000 | 120 | 0.1 | 0.75 |
+| RippleEffectAnalyzerAgent | `complex_reasoning` | `None` | 16000 | 300 | 0.2 | 0.70 |
+| QueryRouter | `classification` | `None` | 1024 | 120 | 0.0 | 0.85 |
+| TruthSynthesizer | `synthesis` | `None` | 8192 | 120 | 0.1 | 0.80 |
 
 **Temperature rationale:**
 - **0.0** for deterministic tasks (parsing, override resolution) where consistency is critical
@@ -1198,9 +1262,8 @@ Per CLAUDE.md, every LLM call MUST set `max_output_tokens` to the model's maximu
 
 | Provider | Model | Max Output Tokens |
 |----------|-------|-------------------|
-| Claude | claude-opus-4-5-20250514 | 8192 |
-| Claude | claude-sonnet-4-5-20250929 | 8192 |
-| Azure OpenAI | gpt-5-mini | 16384 |
+| Azure OpenAI | gpt-5.2 | 16384 |
+| Gemini | gemini-3-pro-preview | 65536 |
 | Gemini | gemini-2.5-flash-lite | 65536 |
 | Gemini | gemini-2.5-pro | 65536 |
 | Gemini | gemini-2.0-flash-exp | 8192 |
@@ -1214,7 +1277,8 @@ Per CLAUDE.md, every LLM call MUST set `max_output_tokens` to the model's maximu
 ```
 backend/app/agents/
 ├── __init__.py
-├── base.py              # BaseAgent ABC
+├── base.py              # BaseAgent ABC + CircuitBreaker integration
+├── circuit_breaker.py   # Per-provider circuit breaker for LLM resilience
 ├── llm_providers.py     # LLMProvider protocol + 3 implementations + factory
 ├── prompt_loader.py     # PromptLoader + PromptTemplateError
 ├── config.py            # AgentConfig dataclass
@@ -1272,6 +1336,7 @@ prompt/
 | **Confidence-gated re-processing** | When confidence < `verification_threshold`, the agent self-critiques and re-runs. This prevents low-quality outputs from flowing into downstream agents unchecked. |
 | **Tool-use agentic loop** | `call_llm_with_tools()` implements a ReAct-style loop where agents can query databases, search pgvector, or look up specific clauses during reasoning — rather than pre-loading all context into the prompt. |
 | **Token estimation before calls** | `_check_token_budget()` prevents silent context window truncation. Raises `LLMProviderError` when estimated input exceeds model limits. |
+| **Per-provider CircuitBreaker** | Each LLM provider has a shared circuit breaker. After consecutive transient failures, the breaker opens and short-circuits further calls to that provider, allowing the auto-failover to engage immediately without wasting retry budget. |
 | **Auto-failover to fallback provider** | When primary provider exhausts retries, automatically attempts fallback. This is infrastructure resilience, not code fallback — the "never fall back" policy applies to workaround code, not provider redundancy. |
 | **TraceContext for observability** | Every LLM call records prompt hash, tokens, latency, and model. Enables cost tracking, prompt versioning, and debugging of incorrect outputs by replaying the exact call. |
 | **Temperature tuning per agent** | 0.0 for deterministic tasks, 0.1-0.2 for exploratory analysis. Prevents both over-creativity in extraction and over-conservatism in conflict detection. |

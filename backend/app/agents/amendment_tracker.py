@@ -62,16 +62,27 @@ class AmendmentTrackerAgent(BaseAgent):
     async def _verify_output(
         self, output: AmendmentTrackOutput, input_data: AmendmentTrackInput
     ) -> AmendmentTrackOutput:
-        """Verify every modification references a real section from the original CTA."""
+        """Verify every modification references a real section from the original CTA.
+
+        Allows subsection references: mod "7.2" is valid if CTA has "7.2" OR parent "7".
+        """
         known_sections = {s.section_number for s in input_data.original_sections}
         for mod in output.modifications:
-            if (mod.modification_type != ModificationType.ADDITION
-                    and mod.section_number not in known_sections):
-                logger.warning(
-                    "Modification references unknown section %s — may be hallucinated",
-                    mod.section_number,
-                )
-                output.extraction_confidence = min(output.extraction_confidence, 0.6)
+            if mod.modification_type == ModificationType.ADDITION:
+                continue
+            # Exact match
+            if mod.section_number in known_sections:
+                continue
+            # Parent section match (7.2 → 7)
+            if "." in mod.section_number:
+                parent = mod.section_number.rsplit(".", 1)[0]
+                if parent in known_sections:
+                    continue
+            logger.warning(
+                "Modification references unknown section %s — may be hallucinated",
+                mod.section_number,
+            )
+            output.extraction_confidence = min(output.extraction_confidence, 0.6)
         return output
 
     async def _scan_for_buried_changes(

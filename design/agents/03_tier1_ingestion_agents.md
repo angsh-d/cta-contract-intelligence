@@ -29,7 +29,7 @@ PDF files ──► DocumentParserAgent (parallel, per document)
 ## 1. DocumentParserAgent
 
 **Purpose:** Extract text, structure, tables, and metadata from PDFs.
-**LLM:** Claude Sonnet (extraction role)
+**LLM:** Azure OpenAI GPT-5.2 (extraction role)
 **File:** `backend/app/agents/document_parser.py`
 
 ### Config
@@ -38,10 +38,8 @@ PDF files ──► DocumentParserAgent (parallel, per document)
 AgentConfig(
     agent_name="document_parser",
     llm_role="extraction",
-    model_override="claude-sonnet-4-5-20250929",
-    max_output_tokens=8192,
-    max_retries=3,
-    timeout_seconds=120,
+    max_output_tokens=16000,
+    timeout_seconds=300,
     verification_threshold=0.80,
 )
 ```
@@ -257,7 +255,7 @@ Return structured JSON following the schema in your instructions.
 ## 2. AmendmentTrackerAgent
 
 **Purpose:** Identify exactly what each amendment modifies, with old/new text extraction.
-**LLM:** Claude Opus (complex reasoning — needs to understand legal amendment language)
+**LLM:** Azure OpenAI GPT-5.2 (complex reasoning — needs to understand legal amendment language)
 **File:** `backend/app/agents/amendment_tracker.py`
 
 ### Config
@@ -266,10 +264,9 @@ Return structured JSON following the schema in your instructions.
 AgentConfig(
     agent_name="amendment_tracker",
     llm_role="complex_reasoning",
-    model_override="claude-opus-4-5-20250514",
     max_output_tokens=8192,
-    max_retries=3,
     timeout_seconds=180,
+    verification_threshold=0.75,
 )
 ```
 
@@ -541,7 +538,7 @@ If no missed modifications are found, return: {{"reasoning": "...", "missed_modi
 ## 3. TemporalSequencerAgent
 
 **Purpose:** Use LLM reasoning to determine document ordering, supersession relationships, and build the version tree — handling retroactive amendments, conditional effectiveness, and non-linear precedence. Deterministic date sorting serves as a validation check, not the primary logic.
-**LLM:** Claude Sonnet (temporal reasoning — primary logic, not just date inference)
+**LLM:** Azure OpenAI GPT-5.2 (temporal reasoning — primary logic, not just date inference)
 **File:** `backend/app/agents/temporal_sequencer.py`
 
 ### Config
@@ -550,9 +547,7 @@ If no missed modifications are found, return: {{"reasoning": "...", "missed_modi
 AgentConfig(
     agent_name="temporal_sequencer",
     llm_role="extraction",
-    model_override="claude-sonnet-4-5-20250929",
     max_output_tokens=4096,
-    max_retries=3,
     timeout_seconds=60,
     verification_threshold=0.80,
 )

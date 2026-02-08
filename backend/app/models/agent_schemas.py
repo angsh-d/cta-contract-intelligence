@@ -378,6 +378,7 @@ class RippleImpact(BaseModel):
     severity: ConflictSeverity
     description: str
     required_action: str
+    cascade_path: Optional[str] = None
     estimated_cost_low: Optional[int] = None
     estimated_cost_high: Optional[int] = None
     estimated_cost_rationale: Optional[str] = None

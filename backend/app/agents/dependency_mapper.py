@@ -118,6 +118,10 @@ class DependencyMapperAgent(BaseAgent):
 
     async def _sync_dependencies(self, stack_id: UUID, clauses: list[CurrentClause], deps: list[ClauseDependency]) -> None:
         """Write clause dependencies to PostgreSQL atomically, clearing stale rows first."""
+        known_sections = {c.section_number for c in clauses}
+        inserted = 0
+        skipped = []
+
         async with self.db.acquire() as conn:
             async with conn.transaction():
                 # Clear stale dependency data for this stack before re-inserting
@@ -126,7 +130,11 @@ class DependencyMapperAgent(BaseAgent):
                     stack_id,
                 )
                 for dep in deps:
-                    await conn.execute(
+                    # Log section number mismatches before INSERT
+                    if dep.from_section not in known_sections or dep.to_section not in known_sections:
+                        skipped.append(f"{dep.from_section} -> {dep.to_section}")
+                        continue
+                    result = await conn.execute(
                         """
                         INSERT INTO clause_dependencies
                             (contract_stack_id, from_clause_id, to_clause_id,
@@ -145,3 +153,13 @@ class DependencyMapperAgent(BaseAgent):
                         dep.confidence,
                         dep.detection_method,
                     )
+                    # asyncpg returns status string like "INSERT 0 1"
+                    if result and result.endswith("1"):
+                        inserted += 1
+
+        if skipped:
+            logger.warning(
+                "Skipped %d dependencies with unknown section numbers: %s",
+                len(skipped), skipped[:10],
+            )
+        logger.info("Synced %d/%d dependencies to DB for stack %s", inserted, len(deps), stack_id)

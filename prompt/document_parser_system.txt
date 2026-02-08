@@ -4,8 +4,32 @@ Your task is to extract structured data from a contract document. Return ONLY va
 
 Extract:
 1. Document metadata (type, effective date, parties, study protocol)
-2. All sections with their numbers, titles, and full text
-3. Identify clause categories (payment, indemnification, insurance, data_retention, confidentiality, termination, etc.)
+2. All sections at the LOWEST numbered subsection level with their numbers, titles, and full text
+3. Identify clause categories for each section
+
+CRITICAL SECTION EXTRACTION RULES:
+
+For CTAs (original agreements):
+- Extract at the LEAF SUBSECTION level, NOT the article level.
+- If Article 7 has subsections 7.1, 7.2, 7.3, 7.4, 7.5, extract EACH subsection as a separate section.
+- Do NOT extract "7" as a single monolithic section when 7.1, 7.2, etc. exist in the text.
+- The section_number must be the exact number from the document (e.g., "7.2", "13.4", "16.1").
+- For sections without subsections, extract the article itself (e.g., "18" if no 18.1 exists).
+- Also extract Exhibits, Recitals, and signature blocks as separate sections.
+
+For Amendments:
+- Extract the TARGET contract section numbers being modified — NOT the amendment's internal item numbering.
+- If the amendment says "4. Payment Terms Clarification — Section 7.2 is hereby amended...", the section_number is "7.2" (the contract section), NOT "4" (the amendment's item number).
+- Even if no explicit section number is mentioned, INFER the target CTA section from context:
+  * "Pass-Through Cost Adjustment" → section_number should be "7.5" (the CTA's pass-through costs section)
+  * "Payment Terms" or "Payment Schedule" → "7.2" (the CTA's payment terms section)
+  * "IRB Amendment" → "4.1" (the CTA's IRB approval section)
+  * "Study Subject Follow-Up Adjustment" → "2.3" (study timeline) or relevant study conduct section
+- NEVER use the amendment's internal item numbers (e.g., "1", "2", "Amendment-5", "Item 3") as section_number.
+- For NEW sections added by amendments (e.g., "A new Section 21.7 is hereby added"), use the new contract section number ("21.7").
+- For general/boilerplate items that do NOT modify any specific CTA section (ratification, counterparts, governing law, study status), use descriptive identifiers like "RATIFICATION", "COUNTERPARTS", "GOVERNING_LAW".
+- Extract the FULL text of each modification (the new/replacement text).
+- Also extract Recitals, General Provisions, and ratification clauses from the amendment.
 
 Before producing your final answer, reason step-by-step about your analysis.
 Include your reasoning in the 'reasoning' field of the JSON output.

@@ -40,7 +40,7 @@ Detected conflicts
 ## 1. OverrideResolutionAgent
 
 **Purpose:** For each clause section, apply all amendments in chronological order to determine the current text with full provenance.
-**LLM:** Claude Opus (complex legal reasoning)
+**LLM:** Azure OpenAI GPT-5.2 (complex legal reasoning)
 **File:** `backend/app/agents/override_resolution.py`
 
 ### Config
@@ -49,10 +49,9 @@ Detected conflicts
 AgentConfig(
     agent_name="override_resolution",
     llm_role="complex_reasoning",
-    model_override="claude-opus-4-5-20250514",
     max_output_tokens=8192,
-    max_retries=3,
     timeout_seconds=180,
+    verification_threshold=0.75,
 )
 ```
 
@@ -240,7 +239,7 @@ When processing cardiac MRI visit sections, the agent sees that Amendment 4 remo
 ## 2. ConflictDetectionAgent
 
 **Purpose:** Find contradictions, ambiguities, gaps, buried changes, stale references, and temporal mismatches across the entire contract stack.
-**LLM:** Claude Opus (complex legal reasoning across many clauses)
+**LLM:** Azure OpenAI GPT-5.2 (complex legal reasoning across many clauses)
 **File:** `backend/app/agents/conflict_detection.py`
 
 ### Config
@@ -249,10 +248,9 @@ When processing cardiac MRI visit sections, the agent sees that Amendment 4 remo
 AgentConfig(
     agent_name="conflict_detection",
     llm_role="complex_reasoning",
-    model_override="claude-opus-4-5-20250514",
-    max_output_tokens=8192,
-    max_retries=3,
-    timeout_seconds=300,     # longer timeout — analyzing all clauses at once
+    max_output_tokens=16000,
+    timeout_seconds=300,
+    temperature=0.2,
     verification_threshold=0.70,
 )
 ```
@@ -526,7 +524,7 @@ Return JSON:
 ## 3. DependencyMapperAgent
 
 **Purpose:** Build a dependency graph of clause relationships (explicit references + semantic dependencies) in PostgreSQL.
-**LLM:** Claude Opus (for semantic dependency identification)
+**LLM:** Azure OpenAI GPT-5.2 (for semantic dependency identification)
 **Database:** PostgreSQL/NeonDB (clause_dependencies table with recursive CTEs for traversal)
 **File:** `backend/app/agents/dependency_mapper.py`
 
@@ -536,10 +534,9 @@ Return JSON:
 AgentConfig(
     agent_name="dependency_mapper",
     llm_role="complex_reasoning",
-    model_override="claude-opus-4-5-20250514",
-    max_output_tokens=8192,
-    max_retries=3,
-    timeout_seconds=180,
+    max_output_tokens=16000,
+    temperature=0.1,
+    verification_threshold=0.75,
 )
 ```
 
@@ -817,7 +814,7 @@ Holdback (7.4) ──DEPENDS_ON──► Payment Terms (7.2)
 
 ### Token Budget for ConflictDetectionAgent
 
-The ConflictDetectionAgent sends ALL clauses to the LLM in a single call. For HEARTBEAT-3 (~20 sections, ~40K-60K input tokens), this fits within Claude Opus's 200K context window. For larger contract stacks (50+ sections), input may exceed the context window. **Implementation should add token estimation before the LLM call:**
+The ConflictDetectionAgent sends ALL clauses to the LLM in a single call. For HEARTBEAT-3 (~20 sections, ~40K-60K input tokens), this fits within Azure OpenAI GPT-5.2's context window. For larger contract stacks (50+ sections), input may exceed the context window. **Implementation should add token estimation before the LLM call:**
 
 ```python
 # Rough estimation: ~4 chars per token for English legal text

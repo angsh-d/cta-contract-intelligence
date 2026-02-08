@@ -68,8 +68,21 @@ class OverrideResolutionAgent(BaseAgent):
                 clause_category=result.get("clause_category", "general"),
             ),
             llm_reasoning=result.get("reasoning", ""),
-            confidence_factors=result.get("confidence_factors", {}),
+            confidence_factors=self._sanitize_confidence_factors(result.get("confidence_factors", {})),
         )
+
+    @staticmethod
+    def _sanitize_confidence_factors(raw: Any) -> dict[str, float]:
+        """Coerce confidence_factors to dict[str, float], dropping non-numeric values."""
+        if not isinstance(raw, dict):
+            return {}
+        cleaned = {}
+        for k, v in raw.items():
+            try:
+                cleaned[str(k)] = float(v)
+            except (ValueError, TypeError):
+                continue
+        return cleaned
 
     def _format_amendment_chain(self, amendments: list[AmendmentForSection]) -> str:
         if not amendments:

@@ -48,10 +48,10 @@ class AgentProcessingError(ContractIQError):
 # ── Database layer ───────────────────────────────────────
 
 class DatabaseError(ContractIQError):
-    """PostgreSQL (NeonDB) or Redis operation failed."""
+    """PostgreSQL (NeonDB) operation failed."""
     def __init__(self, message: str, database: str, **kw):
         super().__init__(message, **kw)
-        self.database = database   # "postgresql", "redis"
+        self.database = database   # "postgresql"
 
 # ── Pipeline layer ───────────────────────────────────────
 
@@ -283,8 +283,8 @@ Every agent log line includes:
 | `tokens_in` | `4521` |
 | `tokens_out` | `2103` |
 | `latency_ms` | `3450` |
-| `model` | `claude-sonnet-4-5-20250929` |
-| `provider` | `claude` |
+| `model` | `gpt-5.2` |
+| `provider` | `azure_openai` |
 | `stage` | `text_extraction` |
 
 ### Log Levels by Content
@@ -408,19 +408,19 @@ The conflict detection prompts contain **generic** conflict detection patterns t
 
 ## 6. Model Assignment Matrix
 
-| Agent | Primary Provider | Primary Model | Fallback Provider | Fallback Model | Rationale |
+| Agent / Role | Primary Provider | Primary Model | Fallback Provider | Fallback Model | Rationale |
 |-------|-----------------|---------------|-------------------|----------------|-----------|
-| DocumentParserAgent | Claude | claude-sonnet-4-5-20250929 | Gemini | gemini-2.5-flash-lite | Extraction task — Sonnet sufficient |
-| AmendmentTrackerAgent | Claude | claude-opus-4-5-20250514 | Azure OpenAI | gpt-5-mini | Complex legal reasoning |
-| TemporalSequencerAgent | Claude | claude-sonnet-4-5-20250929 | Gemini | gemini-2.5-flash-lite | Simple — mostly deterministic |
-| OverrideResolutionAgent | Claude | claude-opus-4-5-20250514 | Azure OpenAI | gpt-5-mini | Complex clause resolution |
-| ConflictDetectionAgent | Claude | claude-opus-4-5-20250514 | Azure OpenAI | gpt-5-mini | Complex multi-clause analysis |
-| DependencyMapperAgent | Claude | claude-opus-4-5-20250514 | Azure OpenAI | gpt-5-mini | Semantic dependency identification |
-| RippleEffectAnalyzerAgent | Claude | claude-opus-4-5-20250514 | Azure OpenAI | gpt-5-mini | Multi-hop reasoning |
-| QueryRouter | Claude | claude-sonnet-4-5-20250929 | Gemini | gemini-2.5-flash-lite | Fast classification (<2s) |
-| TruthSynthesizer | Claude | claude-opus-4-5-20250514 | Azure OpenAI | gpt-5-mini | Comprehensive synthesis |
-| ReusabilityAnalyzerAgent | Claude | claude-sonnet-4-5-20250929 | Gemini | gemini-2.5-flash-lite | Phase 2 — complexity TBD |
-| Embeddings | Gemini | gemini-embedding-001 | Azure OpenAI | text-embedding-3-large | Gemini gemini-embedding-001 used with task_type RETRIEVAL_DOCUMENT (Stage 1 checkpoint + Stage 4 indexing) and RETRIEVAL_QUERY (query-time search) |
+| DocumentParserAgent (extraction) | Azure OpenAI | gpt-5.2 | Gemini | gemini-3-pro-preview | Extraction task |
+| AmendmentTrackerAgent (extraction) | Azure OpenAI | gpt-5.2 | Gemini | gemini-3-pro-preview | Complex legal reasoning |
+| TemporalSequencerAgent (classification) | Azure OpenAI | gpt-5.2 | Gemini | gemini-3-pro-preview | Simple — mostly deterministic |
+| OverrideResolutionAgent (complex_reasoning) | Azure OpenAI | gpt-5.2 | Gemini | gemini-3-pro-preview | Complex clause resolution |
+| ConflictDetectionAgent (complex_reasoning) | Azure OpenAI | gpt-5.2 | Gemini | gemini-3-pro-preview | Complex multi-clause analysis |
+| DependencyMapperAgent (complex_reasoning) | Azure OpenAI | gpt-5.2 | Gemini | gemini-3-pro-preview | Semantic dependency identification |
+| RippleEffectAnalyzerAgent (complex_reasoning) | Azure OpenAI | gpt-5.2 | Gemini | gemini-3-pro-preview | Multi-hop reasoning |
+| QueryRouter (classification) | Azure OpenAI | gpt-5.2 | Gemini | gemini-3-pro-preview | Fast classification (<2s) |
+| TruthSynthesizer (synthesis) | Azure OpenAI | gpt-5.2 | Gemini | gemini-3-pro-preview | Comprehensive synthesis |
+| ReusabilityAnalyzerAgent (synthesis) | Azure OpenAI | gpt-5.2 | Gemini | gemini-3-pro-preview | Phase 2 — complexity TBD |
+| Embeddings (embedding) | Azure OpenAI | gpt-5.2 | Gemini | gemini-3-pro-preview | Gemini gemini-embedding-001 used with task_type RETRIEVAL_DOCUMENT (Stage 1 checkpoint + Stage 4 indexing) and RETRIEVAL_QUERY (query-time search) |
 
 ### Temperature Configuration
 

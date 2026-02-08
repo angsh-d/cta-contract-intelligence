@@ -79,6 +79,7 @@ class LLMResponse(BaseModel):
     latency_ms: int = 0
     provider: str = ""
     error: Optional[str] = None
+    tool_calls: Optional[list[dict]] = None
 ```
 
 ---

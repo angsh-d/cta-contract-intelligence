@@ -84,8 +84,8 @@ Checks per stage:
 
 **Agent**: `DocumentParserAgent`
 **File**: `backend/app/agents/document_parser.py`
-**LLM**: Claude Sonnet 4.5 (`claude-sonnet-4-5-20250929`)
-**Config**: `max_output_tokens=8192`, `verification_threshold=0.80`
+**LLM**: Azure OpenAI GPT-5.2 (role=extraction), Gemini fallback
+**Config**: `max_output_tokens=16000`, `timeout_seconds=300`, `verification_threshold=0.80`
 
 ### What It Does
 
@@ -145,7 +145,7 @@ PDF File
 
 **Agent**: `AmendmentTrackerAgent`
 **File**: `backend/app/agents/amendment_tracker.py`
-**LLM**: Claude Sonnet 4.5 (`claude-sonnet-4-5-20250929`)
+**LLM**: Azure OpenAI GPT-5.2 (role=complex_reasoning), Gemini fallback
 **Config**: `max_output_tokens=8192`, `timeout_seconds=180`, `verification_threshold=0.75`
 
 ### Why Sequential
@@ -224,7 +224,7 @@ For each amendment (sorted by effective_date):
 
 **Agent**: `TemporalSequencerAgent`
 **File**: `backend/app/agents/temporal_sequencer.py`
-**LLM**: Claude Sonnet 4.5 (`claude-sonnet-4-5-20250929`)
+**LLM**: Azure OpenAI GPT-5.2 (role=extraction), Gemini fallback
 **Config**: `max_output_tokens=4096`, `timeout_seconds=60`, `verification_threshold=0.80`
 
 ### Why LLM-First (Not Simple Date Sort)
@@ -274,7 +274,7 @@ All parsed documents
 
 **Agent**: `OverrideResolutionAgent`
 **File**: `backend/app/agents/override_resolution.py`
-**LLM**: Claude Sonnet 4.5 (`claude-sonnet-4-5-20250929`)
+**LLM**: Azure OpenAI GPT-5.2 (role=complex_reasoning), Gemini fallback
 **Config**: `max_output_tokens=8192`, `timeout_seconds=180`, `verification_threshold=0.75`
 
 ### What It Does
@@ -362,8 +362,8 @@ On checkpoint resume, the orchestrator checks `has_resolved_embeddings()` and re
 
 **Agent**: `DependencyMapperAgent`
 **File**: `backend/app/agents/dependency_mapper.py`
-**LLM**: Claude Sonnet 4.5 (`claude-sonnet-4-5-20250929`)
-**Config**: `max_output_tokens=8192`, `temperature=0.1`, `verification_threshold=0.75`
+**LLM**: Azure OpenAI GPT-5.2 (role=complex_reasoning), Gemini fallback
+**Config**: `max_output_tokens=16000`, `temperature=0.1`, `verification_threshold=0.75`
 
 ### What It Does
 
@@ -427,8 +427,8 @@ SELECT DISTINCT ON (to_clause_id) * FROM dependency_chain;
 
 **Agent**: `ConflictDetectionAgent`
 **File**: `backend/app/agents/conflict_detection.py`
-**LLM**: Claude Sonnet 4.5 (`claude-sonnet-4-5-20250929`)
-**Config**: `max_output_tokens=8192`, `timeout_seconds=300`, `temperature=0.2`, `verification_threshold=0.70`
+**LLM**: Azure OpenAI GPT-5.2 (role=complex_reasoning), Gemini fallback
+**Config**: `max_output_tokens=16000`, `timeout_seconds=300`, `temperature=0.2`, `verification_threshold=0.70`
 
 ### Conflict Types
 
@@ -557,7 +557,7 @@ User Query
 
 **Agent**: `QueryRouter`
 **File**: `backend/app/agents/query_router.py`
-**LLM**: Claude Sonnet 4.5 (`claude-sonnet-4-5-20250929`)
+**LLM**: Azure OpenAI GPT-5.2 (role=classification), Gemini fallback
 **Config**: `max_output_tokens=1024`, `temperature=0.0`, `verification_threshold=0.85`
 
 **Cache Check**: Before routing, checks in-memory cache using `query:{stack_id}:{sha256(query)}` key.
@@ -613,7 +613,7 @@ Three retrieval sources merged and deduplicated:
 
 **Agent**: `TruthSynthesizer`
 **File**: `backend/app/agents/truth_synthesizer.py`
-**LLM**: Claude Sonnet 4.5 (`claude-sonnet-4-5-20250929`)
+**LLM**: Azure OpenAI GPT-5.2 (role=synthesis), Gemini fallback
 **Config**: `max_output_tokens=8192`, `temperature=0.1`, `verification_threshold=0.80`
 
 **Prompts**:
@@ -638,8 +638,8 @@ Three retrieval sources merged and deduplicated:
 
 **Agent**: `RippleEffectAnalyzerAgent` (Tier 3)
 **File**: `backend/app/agents/ripple_effect.py`
-**LLM**: Claude Sonnet 4.5 (`claude-sonnet-4-5-20250929`)
-**Config**: `max_output_tokens=8192`, `timeout_seconds=300`, `temperature=0.2`, `verification_threshold=0.70`
+**LLM**: Azure OpenAI GPT-5.2 (role=complex_reasoning), Gemini fallback
+**Config**: `max_output_tokens=16000`, `timeout_seconds=300`, `temperature=0.2`, `verification_threshold=0.70`
 
 **Two-phase process**:
 
@@ -688,13 +688,13 @@ All agents extend `BaseAgent` (`backend/app/agents/base.py`):
 
 | Feature | Description |
 |---------|-------------|
-| `call_llm()` | Structured JSON output via Anthropic tool_use |
+| `call_llm()` | Structured JSON output via LLM provider (Azure OpenAI GPT-5.2 primary) |
 | `run()` | Wraps `process()` with self-verification and confidence-gated re-processing |
 | `_verify_output()` | Domain-specific output validation (overridden per agent) |
 | `_reprocess_with_critique()` | Re-runs with critique feedback when confidence < threshold |
 | `call_llm_with_tools()` | ReAct loop: LLM reasons, calls tools, observes (up to 5 turns) |
 | Retry logic | Exponential backoff (2^attempt seconds), circuit breaker |
-| Fallback provider | Automatic failover to Azure OpenAI if Claude fails |
+| Fallback provider | Automatic failover to Gemini if Azure OpenAI fails |
 | Token budget validation | Prevents input + output exceeding context window |
 | TraceContext | Records all LLM calls for cost tracking |
 

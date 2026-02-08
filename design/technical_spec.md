@@ -60,9 +60,9 @@
 └─────────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────────┐
-│                  Claude API (Anthropic)                      │
-│  - Claude Opus 4.5 (complex reasoning)                       │
-│  - Claude Sonnet 4.5 (structured extraction)                 │
+│              Azure OpenAI GPT-5.2 (Primary LLM)              │
+│  - All agents: extraction, reasoning, classification         │
+│  - Gemini (fallback LLM for all roles)                       │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -72,16 +72,16 @@
 - **Language:** Python 3.11+
 - **Web Framework:** FastAPI
 - **Async Runtime:** asyncio, aiohttp
-- **Task Queue:** Celery (for background processing)
-- **Message Broker:** Redis
+- **Task Processing:** asyncio background tasks (in-memory)
 
 ### Databases
 - **Relational:** PostgreSQL 15+ via NeonDB (primary data store + clause dependency graph via recursive CTEs)
 - **Vector Store:** pgvector on NeonDB (section_embeddings table, HNSW cosine index). Two-tier architecture: `is_resolved=FALSE` rows serve as Stage 1 per-document checkpoint fallback (keyed by stack, doc, section); `is_resolved=TRUE` rows serve as Stage 4 resolved-clause query search (keyed by stack, section). Query-time searches filter on `is_resolved = TRUE`; checkpoint lookups filter on `is_resolved = FALSE`
-- **Cache:** Redis (session state, query cache)
+- **Cache:** InMemoryCache (query result caching with TTL, replaces Redis)
 
 ### AI/ML
-- **LLM API:** Anthropic Claude API (claude-opus-4.5, claude-sonnet-4.5)
+- **Primary LLM:** Azure OpenAI GPT-5.2 (all agents: extraction, complex reasoning, classification, synthesis)
+- **Fallback LLM:** Google Gemini (gemini-3-pro-preview, automatic failover)
 - **Embeddings:** Gemini gemini-embedding-001 (768-dim, via GEMINI_API_KEY in .env). Task types: `RETRIEVAL_DOCUMENT` for indexing, `RETRIEVAL_QUERY` for search
 - **Document Processing:** PyMuPDF, pdfplumber, python-docx
 - **NLP:** spaCy (optional for entity extraction)
@@ -556,44 +556,52 @@ Each agent follows this pattern:
 ```python
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List
-from anthropic import Anthropic
+from app.agents.llm_providers import LLMProvider
 
 class BaseAgent(ABC):
-    def __init__(self, client: Anthropic):
-        self.client = client
-        self.model = "claude-sonnet-4.5"  # override per agent
-        self.max_tokens = 4096
-        
+    def __init__(self, config: AgentConfig, llm_provider: LLMProvider,
+                 prompt_loader: PromptLoader, fallback_provider: LLMProvider = None,
+                 llm_semaphore: asyncio.Semaphore = None):
+        self.config = config
+        self.llm_provider = llm_provider          # Azure OpenAI GPT-5.2 (primary)
+        self.fallback_provider = fallback_provider  # Gemini (fallback)
+        self.prompt_loader = prompt_loader
+        self._llm_semaphore = llm_semaphore
+
     @abstractmethod
     async def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """Main processing method - must be implemented by each agent"""
         pass
-        
+
     async def call_llm(
-        self, 
-        system_prompt: str, 
+        self,
+        system_prompt: str,
         user_message: str,
-        tools: List[Dict] = None
-    ) -> Dict[str, Any]:
-        """Wrapper for Claude API calls with error handling"""
+        *,
+        max_output_tokens: int = None,
+        temperature: float = 0.0,
+        response_format: str = None,
+    ) -> LLMResponse:
+        """Wrapper for LLM API calls with retry, fallback, and error handling"""
         try:
-            response = await self.client.messages.create(
-                model=self.model,
-                max_tokens=self.max_tokens,
-                system=system_prompt,
-                messages=[{"role": "user", "content": user_message}],
-                tools=tools if tools else []
+            response = await self.llm_provider.complete(
+                system_prompt=system_prompt,
+                user_message=user_message,
+                max_output_tokens=max_output_tokens or self.config.max_output_tokens,
+                temperature=temperature,
+                response_format=response_format,
             )
-            return {
-                "success": True,
-                "content": response.content,
-                "usage": response.usage
-            }
+            return response
         except Exception as e:
-            return {
-                "success": False,
-                "error": str(e)
-            }
+            if self.fallback_provider:
+                return await self.fallback_provider.complete(
+                    system_prompt=system_prompt,
+                    user_message=user_message,
+                    max_output_tokens=max_output_tokens or self.config.max_output_tokens,
+                    temperature=temperature,
+                    response_format=response_format,
+                )
+            raise
 ```
 
 ## Tier 1: Document Ingestion Agents
@@ -605,16 +613,15 @@ class BaseAgent(ABC):
 **Implementation:**
 ```python
 class DocumentParserAgent(BaseAgent):
-    def __init__(self, client: Anthropic):
-        super().__init__(client)
-        self.model = "claude-sonnet-4.5"
-        
+    """LLM: Azure OpenAI GPT-5.2 (role=extraction), Gemini fallback.
+    Config: max_output_tokens=16000, verification_threshold=0.80"""
+
     async def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Input: 
+        Input:
             - file_path: path to document
             - document_type: 'cta', 'amendment', 'exhibit'
-        
+
         Output:
             - extracted_text: full text
             - sections: list of {section_number, title, text}
@@ -623,11 +630,11 @@ class DocumentParserAgent(BaseAgent):
         """
         file_path = input_data['file_path']
         document_type = input_data['document_type']
-        
+
         # Step 1: Extract raw text
         raw_text = self._extract_text(file_path)
-        
-        # Step 2: Use Claude to structure the text
+
+        # Step 2: Use Azure OpenAI GPT-5.2 to structure the text
         system_prompt = """You are a legal document parser specializing in clinical trial agreements.
         
         Extract the following from the document:
@@ -675,9 +682,8 @@ Return structured JSON with sections, metadata, and tables."""
 **Implementation:**
 ```python
 class AmendmentTrackerAgent(BaseAgent):
-    def __init__(self, client: Anthropic):
-        super().__init__(client)
-        self.model = "claude-opus-4.5"  # needs complex reasoning
+    """LLM: Azure OpenAI GPT-5.2 (role=complex_reasoning), Gemini fallback.
+    Config: max_output_tokens=8192, timeout_seconds=180, verification_threshold=0.75"""
         
     async def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -802,9 +808,8 @@ class TemporalSequencerAgent(BaseAgent):
 **Implementation:**
 ```python
 class OverrideResolutionAgent(BaseAgent):
-    def __init__(self, client: Anthropic):
-        super().__init__(client)
-        self.model = "claude-opus-4.5"
+    """LLM: Azure OpenAI GPT-5.2 (role=complex_reasoning), Gemini fallback.
+    Config: max_output_tokens=8192, timeout_seconds=180, verification_threshold=0.75"""
         
     async def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -877,10 +882,9 @@ Return JSON:
 **Implementation:**
 ```python
 class ConflictDetectionAgent(BaseAgent):
-    def __init__(self, client: Anthropic):
-        super().__init__(client)
-        self.model = "claude-opus-4.5"
-        
+    """LLM: Azure OpenAI GPT-5.2 (role=complex_reasoning), Gemini fallback.
+    Config: max_output_tokens=16000, timeout_seconds=300, temperature=0.2, verification_threshold=0.70"""
+
     async def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Input:
@@ -968,10 +972,12 @@ Identify all conflicts. Return JSON:
 **Implementation:**
 ```python
 class DependencyMapperAgent(BaseAgent):
-    def __init__(self, client: Anthropic, db_pool):
-        super().__init__(client)
+    """LLM: Azure OpenAI GPT-5.2 (role=complex_reasoning), Gemini fallback.
+    Config: max_output_tokens=16000, temperature=0.1, verification_threshold=0.75"""
+
+    def __init__(self, config, llm_provider, prompt_loader, db_pool, **kwargs):
+        super().__init__(config, llm_provider, prompt_loader, **kwargs)
         self.db = db_pool
-        self.model = "claude-opus-4.5"
         
     async def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -986,7 +992,7 @@ class DependencyMapperAgent(BaseAgent):
         clauses = input_data['clauses']
         contract_stack_id = input_data['contract_stack_id']
         
-        # Step 1: Use Claude to identify ALL dependencies (explicit + semantic)
+        # Step 1: Use Azure OpenAI GPT-5.2 to identify ALL dependencies (explicit + semantic)
         system_prompt = """You are an expert at identifying dependencies between contract clauses.
 
 Analyze clauses and identify ALL relationships in a single pass:
@@ -1058,10 +1064,12 @@ Return JSON:
 **Implementation:**
 ```python
 class RippleEffectAnalyzerAgent(BaseAgent):
-    def __init__(self, client: Anthropic, db_pool):
-        super().__init__(client)
+    """LLM: Azure OpenAI GPT-5.2 (role=complex_reasoning), Gemini fallback.
+    Config: max_output_tokens=16000, timeout_seconds=300, temperature=0.2, verification_threshold=0.70"""
+
+    def __init__(self, config, llm_provider, prompt_loader, db_pool, **kwargs):
+        super().__init__(config, llm_provider, prompt_loader, **kwargs)
         self.db = db_pool
-        self.model = "claude-opus-4.5"
         
     async def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -1080,7 +1088,7 @@ class RippleEffectAnalyzerAgent(BaseAgent):
         # Step 1: Query PostgreSQL for dependency graph
         dependency_paths = await self._get_dependency_paths(stack_id, change['section'])
         
-        # Step 2: Analyze each hop using Claude
+        # Step 2: Analyze each hop using Azure OpenAI GPT-5.2
         impacts_by_hop = {}
         
         for hop in range(1, 6):  # up to 5 hops
@@ -1194,7 +1202,7 @@ Return JSON with material impacts only:
             return paths_by_hop
             
     async def _generate_recommendations(self, impacts: List[Dict]) -> List[Dict]:
-        """Use Claude to prioritize and synthesize recommendations"""
+        """Use Azure OpenAI GPT-5.2 to prioritize and synthesize recommendations"""
         system_prompt = """You are synthesizing ripple effect analysis into actionable recommendations.
 
 Prioritize by:
@@ -1239,19 +1247,15 @@ Return JSON:
 **Implementation:**
 ```python
 class AgentOrchestrator:
-    def __init__(self, anthropic_client, postgres_pool, redis_client):
-        self.claude = anthropic_client
+    def __init__(self, postgres_pool, vector_store):
         self.postgres = postgres_pool
-        self.redis = redis_client
+        self.vector_store = vector_store
+        self.blackboard = InMemoryBlackboard()
+        self.cache = InMemoryCache()
 
-        # Initialize all agents
-        self.parser = DocumentParserAgent(anthropic_client)
-        self.amendment_tracker = AmendmentTrackerAgent(anthropic_client)
-        self.temporal_sequencer = TemporalSequencerAgent(anthropic_client)
-        self.override_resolver = OverrideResolutionAgent(anthropic_client)
-        self.conflict_detector = ConflictDetectionAgent(anthropic_client)
-        self.dependency_mapper = DependencyMapperAgent(anthropic_client, postgres_pool)
-        self.ripple_analyzer = RippleEffectAnalyzerAgent(anthropic_client, postgres_pool)
+        # LLMProviderFactory resolves Azure OpenAI GPT-5.2 (primary) + Gemini (fallback) per role
+        # Initialize all agents with config, provider, prompt_loader, fallback, and semaphore
+        self._init_agents(prompt_loader)
         
     async def process_contract_stack(self, contract_stack_id: str) -> Dict[str, Any]:
         """
@@ -1364,57 +1368,37 @@ class AgentOrchestrator:
             return {"error": "Unknown query type"}
             
     async def _classify_query(self, query: str) -> str:
-        """Use Claude to classify query type"""
-        system_prompt = """Classify user queries into these types:
-
-1. truth_reconstitution: "What are the current payment terms?" "Who is the PI?" "What is Section 7.2?"
-2. conflict_detection: "Are there any conflicts?" "Find inconsistencies"
-3. ripple_analysis: "What if we change data retention?" "Impact of this amendment?"
-
-Return only the type, no explanation."""
-
-        result = await self.claude.messages.create(
-            model="claude-sonnet-4.5",
-            max_tokens=50,
-            system=system_prompt,
-            messages=[{"role": "user", "content": f"Classify: {query}"}]
+        """Use QueryRouter agent (Azure OpenAI GPT-5.2) to classify query type"""
+        # Delegates to QueryRouter agent which uses Azure OpenAI GPT-5.2
+        # with max_output_tokens=1024, verification_threshold=0.85
+        route_output = await self.agents["query_router"].run(
+            QueryRouteInput(query_text=query)
         )
-        
-        return result.content[0].text.strip()
+        return route_output.query_type
         
     async def _handle_truth_query(self, query: str, contract_stack_id: str) -> Dict[str, Any]:
         """Handle truth reconstitution queries"""
-        
-        # Get relevant clauses from vector search
-        relevant_clauses = await self._semantic_search(query, contract_stack_id)
-        
-        # Use Claude to synthesize answer
-        system_prompt = """You are answering a question about a clinical trial contract.
 
-Use the provided clauses to answer the question accurately.
-Always cite your sources (document name, section number).
-If information is ambiguous or conflicting, state that clearly.
+        # Get relevant clauses from pgvector semantic search (is_resolved=TRUE)
+        relevant_clauses = await self._retrieve_clauses(query, contract_stack_id)
 
-Return structured JSON with answer and sources."""
-
-        user_message = f"""Question: {query}
-
-Relevant clauses:
-{json.dumps(relevant_clauses, indent=2)}
-
-Answer the question with full citations."""
-
-        result = await self.claude.messages.create(
-            model="claude-opus-4.5",
-            max_tokens=2000,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_message}]
+        # Use TruthSynthesizer agent (Azure OpenAI GPT-5.2) to synthesize answer
+        # Config: max_output_tokens=8192, temperature=0.1, verification_threshold=0.80
+        synthesis_output = await self.agents["truth_synthesizer"].run(
+            TruthSynthesisInput(
+                query_text=query,
+                query_type="truth_reconstitution",
+                relevant_clauses=relevant_clauses,
+                known_conflicts=[],
+            )
         )
-        
+
         return {
             "success": True,
-            "answer": result.content[0].text,
-            "sources": relevant_clauses
+            "answer": synthesis_output.answer,
+            "sources": synthesis_output.sources,
+            "confidence": synthesis_output.confidence,
+            "caveats": synthesis_output.caveats,
         }
 ```
 
@@ -1628,15 +1612,16 @@ services:
       - "8000:8000"
     environment:
       - EXTERNAL_DATABASE_URL=${EXTERNAL_DATABASE_URL}
-      - REDIS_URL=redis://redis:6379
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY}
       - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT}
-    depends_on:
-      - redis
+      - AZURE_OPENAI_DEPLOYMENT=${AZURE_OPENAI_DEPLOYMENT}
+      - AZURE_OPENAI_API_VERSION=${AZURE_OPENAI_API_VERSION}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
     volumes:
       - ./uploads:/app/uploads
       # Vector embeddings stored in NeonDB via pgvector (two-tier: is_resolved=FALSE for Stage 1 checkpoint fallback, is_resolved=TRUE for Stage 4 query search) — no local volume needed
+      # Background processing uses asyncio tasks (no Celery/Redis required)
+      # Query caching uses InMemoryCache with TTL (no Redis required)
 
   frontend:
     build: ./frontend
@@ -1647,46 +1632,35 @@ services:
     depends_on:
       - api
 
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-
-  celery:
-    build: ./backend
-    command: celery -A app.tasks worker --loglevel=info
-    environment:
-      - EXTERNAL_DATABASE_URL=${EXTERNAL_DATABASE_URL}
-      - REDIS_URL=redis://redis:6379
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-    depends_on:
-      - redis
+  # Note: Redis and Celery are not currently used.
+  # Background tasks use asyncio, caching uses InMemoryCache + InMemoryBlackboard.
+  # Redis may be added as an optional future enhancement for distributed caching.
 ```
 
 ## Environment Variables
 
 **.env**
 ```bash
-# Anthropic
-ANTHROPIC_API_KEY=sk-ant-...
-
 # Database (NeonDB)
 EXTERNAL_DATABASE_URL=postgresql://neondb_owner:...@ep-....neon.tech/neondb?sslmode=require
 
-# Redis
-REDIS_URL=redis://localhost:6379
-
-# Azure OpenAI (for embeddings + GPT-5-mini)
+# Azure OpenAI (Primary LLM — GPT-5.2 for all agents)
 AZURE_OPENAI_API_KEY=...
 AZURE_OPENAI_ENDPOINT=https://...openai.azure.com
-AZURE_OPENAI_DEPLOYMENT=gpt-5-mini
+AZURE_OPENAI_DEPLOYMENT=gpt-5.2
 AZURE_OPENAI_API_VERSION=2024-10-01-preview
 
-# Gemini
+# Gemini (Fallback LLM + Embeddings)
 GEMINI_API_KEY=...
+
+# Anthropic (optional, ClaudeProvider available but not used in current role map)
+ANTHROPIC_API_KEY=sk-ant-...
 
 # Vector embeddings use pgvector on NeonDB (two-tier: is_resolved=FALSE for Stage 1 per-document checkpoint fallback, is_resolved=TRUE for Stage 4 resolved-clause query search)
 # Embedding model: Gemini gemini-embedding-001 (task_type=RETRIEVAL_DOCUMENT for indexing, RETRIEVAL_QUERY for search; uses GEMINI_API_KEY above)
+
+# No Redis required — caching uses InMemoryCache, inter-agent communication uses InMemoryBlackboard
+# No Celery required — background processing uses asyncio tasks
 
 # Application
 APP_ENV=development
@@ -1708,8 +1682,8 @@ from app.agents import DocumentParserAgent, AmendmentTrackerAgent
 
 @pytest.mark.asyncio
 async def test_document_parser():
-    """Test document parser can extract sections"""
-    agent = DocumentParserAgent(mock_anthropic_client())
+    """Test document parser can extract sections (uses Azure OpenAI GPT-5.2)"""
+    agent = DocumentParserAgent(mock_llm_config())
     
     result = await agent.process({
         'file_path': 'tests/fixtures/sample_cta.pdf',
@@ -1723,7 +1697,7 @@ async def test_document_parser():
 @pytest.mark.asyncio
 async def test_amendment_tracker():
     """Test amendment tracker identifies modifications"""
-    agent = AmendmentTrackerAgent(mock_anthropic_client())
+    agent = AmendmentTrackerAgent(mock_llm_config())
     
     amendment_text = """
     Section 7.2 of the Agreement is hereby amended to read as follows:
@@ -1748,9 +1722,8 @@ async def test_amendment_tracker():
 async def test_full_pipeline():
     """Test full contract processing pipeline"""
     orchestrator = AgentOrchestrator(
-        anthropic_client,
-        postgres_pool,
-        redis_client
+        postgres_pool=postgres_pool,
+        vector_store=vector_store,
     )
     
     # Create test contract stack
@@ -1793,7 +1766,7 @@ async def test_full_pipeline():
 - [ ] Set up project structure
 - [ ] Configure Docker Compose
 - [ ] Create database schemas
-- [ ] Set up NeonDB (PostgreSQL + pgvector), Redis
+- [ ] Set up NeonDB (PostgreSQL + pgvector)
 - [ ] Implement basic API structure (FastAPI)
 - [ ] Create React frontend skeleton
 
@@ -1803,7 +1776,7 @@ async def test_full_pipeline():
 - [ ] Implement TemporalSequencerAgent
 - [ ] Create document upload UI
 - [ ] Implement file storage (S3 or local)
-- [ ] Add background processing (Celery)
+- [ ] Add background processing (asyncio tasks)
 
 ### Week 5-6: Core Intelligence
 - [ ] Implement OverrideResolutionAgent

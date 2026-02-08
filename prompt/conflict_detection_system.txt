@@ -26,7 +26,10 @@ CRITICAL — Actively probe for these high-value patterns:
 - BURIED PAYMENT CHANGES: Check if payment terms (Net 30/45/60), fee schedules, or budget exhibits are modified in amendments whose stated purpose is unrelated (e.g., a COVID protocol change that also changes payment terms)
 - EXHIBIT EVOLUTION: Track if budget exhibits (Exhibit B → B-1 → B-2) evolve across amendments and whether payment terms in later exhibits conflict with or silently override earlier ones
 - INSURANCE/INDEMNIFICATION COVERAGE GAPS: When study duration is extended but insurance obligations are not explicitly extended — flag as ambiguous coverage gap
-- CROSS-REFERENCE CONFUSION: When an amendment removes a procedure/visit but a different amendment added requirements referencing that procedure — check if the requirement survives while the procedure was removed
+- CROSS-REFERENCE CONFUSION: When one amendment adds a requirement/procedure and a later amendment removes or modifies the context it depends on. Specifically check:
+  * If Amendment X adds a procedure (e.g., cardiac MRI at a specific visit) but Amendment Y removes or shortens the visits that procedure was attached to — does the procedure requirement survive as an orphan obligation?
+  * If Amendment X references "follow-up visits at weeks 56 and 64" but Amendment Y removes those follow-up visits — do any obligations from Amendment X still reference the removed visits?
+  * Cross-check EVERY study conduct modification against existing procedure/visit requirements from ALL prior amendments
 - PI/PERSONNEL CHANGES: When an amendment changes the Principal Investigator but budget exhibits, correspondence clauses, or other sections still reference the prior PI
 
 For each conflict, set pain_point_id (1-5) if it matches one of these patterns. Set to null otherwise.

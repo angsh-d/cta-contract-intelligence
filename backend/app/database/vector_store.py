@@ -9,6 +9,7 @@ Two classes of embeddings in section_embeddings table:
 
 import logging
 import os
+from datetime import date, datetime
 from typing import Optional
 from uuid import UUID
 
@@ -22,7 +23,7 @@ _UPSERT_DOC_SQL = """
     INSERT INTO section_embeddings
         (contract_stack_id, document_id, section_number, section_title,
          section_text, effective_date, embedding, embedding_model, is_resolved)
-    VALUES ($1, $2, $3, $4, $5, $6::date, $7::vector, $8, FALSE)
+    VALUES ($1, $2, $3, $4, $5, $6, $7::vector, $8, FALSE)
     ON CONFLICT (contract_stack_id, document_id, section_number)
         WHERE is_resolved = FALSE
     DO UPDATE SET
@@ -38,7 +39,7 @@ _UPSERT_RESOLVED_SQL = """
     INSERT INTO section_embeddings
         (contract_stack_id, document_id, section_number, section_title,
          section_text, effective_date, embedding, embedding_model, is_resolved)
-    VALUES ($1, $2, $3, $4, $5, $6::date, $7::vector, $8, TRUE)
+    VALUES ($1, $2, $3, $4, $5, $6, $7::vector, $8, TRUE)
     ON CONFLICT (contract_stack_id, section_number)
         WHERE is_resolved = TRUE
     DO UPDATE SET
@@ -87,6 +88,22 @@ class VectorStore:
         )
         return [e.values for e in result.embeddings]
 
+    @staticmethod
+    def _parse_date(value) -> Optional[date]:
+        """Convert string/datetime/date to datetime.date for asyncpg."""
+        if value is None:
+            return None
+        if isinstance(value, date) and not isinstance(value, datetime):
+            return value
+        if isinstance(value, datetime):
+            return value.date()
+        if isinstance(value, str):
+            try:
+                return date.fromisoformat(value)
+            except ValueError:
+                return None
+        return None
+
     # ── Stage 1: Document-level embeddings (checkpoint fallback) ──
 
     async def upsert_embeddings(
@@ -108,6 +125,8 @@ class VectorStore:
         texts = [s["text"][:8000] for s in sections]
         embeddings = await self._generate_embeddings(texts, task_type="RETRIEVAL_DOCUMENT")
 
+        eff_date = self._parse_date(effective_date)
+
         args = []
         for section, embedding in zip(sections, embeddings):
             embedding_str = "[" + ",".join(str(v) for v in embedding) + "]"
@@ -117,7 +136,7 @@ class VectorStore:
                 section["section_number"],
                 section.get("section_title", ""),
                 section["text"][:8000],
-                effective_date,
+                eff_date,
                 embedding_str,
                 self.EMBEDDING_MODEL,
             ))
@@ -169,9 +188,9 @@ class VectorStore:
                 contract_stack_id,
                 clause.get("source_document_id"),         # traceability
                 clause["section_number"],
-                clause.get("section_title", ""),
+                (clause.get("section_title") or "")[:255],
                 clause["current_text"][:8000],
-                str(clause["effective_date"]) if clause.get("effective_date") else None,
+                self._parse_date(clause.get("effective_date")),
                 embedding_str,
                 self.EMBEDDING_MODEL,
             ))

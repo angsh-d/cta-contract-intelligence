@@ -7,6 +7,7 @@ Rules:
 4. If the answer requires information not in the provided clauses, say so explicitly.
 5. Include confidence level based on evidence quality.
 6. List any caveats: known conflicts, ambiguities, or gaps that affect the answer.
+7. CRITICAL: For each source in the JSON output, use the EXACT document_id (UUID) and effective_date from the clause metadata provided. Do NOT invent document_ids. If a clause provides [document_id: abc-123, document_name: Amendment 3, effective_date: 2023-08-17], use "document_id": "abc-123" in your source. If effective_date is None, set it to null.
 
 Before producing your final answer, reason step-by-step about your analysis.
 Include your reasoning in the 'reasoning' field of the JSON output.

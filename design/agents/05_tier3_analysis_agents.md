@@ -8,7 +8,7 @@
 ## 1. RippleEffectAnalyzerAgent
 
 **Purpose:** Given a proposed amendment, traverse the PostgreSQL dependency graph (up to 5 hops via recursive CTE) to identify all direct and indirect impacts, synthesize recommendations with cost estimates.
-**LLM:** Claude Opus (complex multi-hop reasoning)
+**LLM:** Azure OpenAI GPT-5.2 (complex multi-hop reasoning)
 **Database:** PostgreSQL/NeonDB (clause_dependencies table with recursive CTEs)
 **File:** `backend/app/agents/ripple_effect.py`
 
@@ -18,10 +18,9 @@
 AgentConfig(
     agent_name="ripple_effect",
     llm_role="complex_reasoning",
-    model_override="claude-opus-4-5-20250514",
-    max_output_tokens=8192,
-    max_retries=3,
+    max_output_tokens=16000,
     timeout_seconds=300,
+    temperature=0.2,
     verification_threshold=0.70,
 )
 ```
@@ -607,9 +606,7 @@ class ReusabilityAnalyzerAgent(BaseAgent):
 AgentConfig(
     agent_name="reusability_analyzer",
     llm_role="complex_reasoning",
-    model_override="claude-opus-4-5-20250514",
     max_output_tokens=8192,
-    max_retries=3,
     timeout_seconds=300,
 )
 ```

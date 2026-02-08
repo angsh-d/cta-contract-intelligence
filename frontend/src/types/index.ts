@@ -59,12 +59,20 @@ export interface QueryResponse {
   execution_time_ms: number;
 }
 
+export interface ConflictEvidence {
+  document_id: string;
+  document_label: string;
+  section_number: string;
+  relevant_text: string;
+}
+
 export interface Conflict {
   id: string;
   conflict_type: string;
   severity: string;
   description: string;
   affected_clauses: string[];
+  evidence: ConflictEvidence[];
   recommendation: string;
   pain_point_id: number | null;
 }
@@ -92,6 +100,42 @@ export interface ClauseHistory {
     description: string;
     confidence: number | null;
   }>;
+}
+
+export interface SourceChainLink {
+  stage: string;
+  document_id: string;
+  document_label: string;
+  text: string;
+  change_description: string | null;
+  modification_type: string | null;
+}
+
+export interface ClauseConflict {
+  conflict_id: string;
+  conflict_type: string;
+  severity: string;
+  description: string;
+  recommendation: string;
+  pain_point_id: number | null;
+}
+
+export interface DocumentClause {
+  section_number: string;
+  section_title: string;
+  current_text: string;
+  clause_category: string;
+  is_current: boolean;
+  effective_date: string | null;
+  source_chain: SourceChainLink[];
+  conflicts: ClauseConflict[];
+}
+
+export interface DocumentClausesResponse {
+  document_id: string;
+  filename: string;
+  document_type: string;
+  clauses: DocumentClause[];
 }
 
 export interface JobStatus {

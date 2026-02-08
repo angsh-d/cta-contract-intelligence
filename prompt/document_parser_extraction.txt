@@ -1,5 +1,7 @@
 Parse this {document_type} document and extract all sections and metadata.
 
+REMINDER: Extract sections at the LOWEST NUMBERED SUBSECTION level (e.g., 7.1, 7.2, 7.3 — NOT just "7"). For amendments, use the TARGET contract section numbers (e.g., "7.2", "16.1"), NOT the amendment's internal item numbers (e.g., "1", "2", "3").
+
 Document text:
 {raw_text}
 

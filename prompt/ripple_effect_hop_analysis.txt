@@ -3,7 +3,7 @@ A change is proposed to Section {section_number}:
   PROPOSED: {proposed_text}
 
 You are analyzing HOP {hop_number} impacts — clauses that are {hop_number} step(s) away in the dependency graph.
-
+{prior_impacts_context}
 Affected clauses at this hop:
 {hop_clauses}
 
@@ -20,9 +20,10 @@ Return JSON:
       "affected_section": "12.1",
       "affected_section_title": "Indemnification",
       "impact_type": "indemnification_gap",
-      "severity": "critical",
+      "severity": "critical",  // MUST be one of: "critical", "high", "medium", "low"
       "description": "Indemnification covers 7 years but data retention would be 25 years, leaving 18 years unprotected",
       "required_action": "Extend indemnification period to match data retention",
+      "cascade_path": "§9.2 (Data Retention) → §12.1 (Indemnification)",
       "estimated_cost_low": 150000,
       "estimated_cost_high": 200000,
       "estimated_cost_rationale": "Additional insurance premium for 18-year extended coverage",
