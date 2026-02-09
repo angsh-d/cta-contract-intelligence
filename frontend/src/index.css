@@ -107,7 +107,7 @@ body {
   color: #555;
 }
 .tiptap.ProseMirror mark {
-  background: #e8e8e8;
+  background: #fff3cd;
   padding: 1px 2px;
   border-radius: 2px;
 }

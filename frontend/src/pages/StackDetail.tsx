@@ -61,6 +61,12 @@ import {
   Minus,
   Superscript,
   Subscript,
+  Clipboard,
+  ClipboardPaste,
+  Scissors,
+  Paintbrush,
+  Type,
+  ChevronUp,
 } from 'lucide-react'
 import {
   useStack,
@@ -2167,65 +2173,126 @@ function RippleTab({ stackId }: { stackId: string }) {
 }
 
 
-// ── Consolidate Tab — Word-style Editor (TipTap) ─────────────
+// ── Consolidate Tab — Microsoft Word Editor (TipTap) ─────────
 
-function WordBtn({ icon: Icon, label, active, onClick, disabled }: {
-  icon: any; label: string; active?: boolean; onClick?: () => void; disabled?: boolean
+function RibbonBtn({ icon: Icon, label, active, onClick, disabled, size = 'sm' }: {
+  icon: any; label: string; active?: boolean; onClick?: () => void; disabled?: boolean; size?: 'sm' | 'lg'
 }) {
+  if (size === 'lg') {
+    return (
+      <button
+        title={label}
+        onClick={onClick}
+        disabled={disabled}
+        className={`flex flex-col items-center justify-center px-[6px] py-[3px] rounded-[3px] transition-colors gap-[2px] min-w-[44px]
+          ${disabled ? 'opacity-40 cursor-not-allowed' : ''}
+          ${active
+            ? 'bg-[#c6ddf7] border border-[#8cb8e8]'
+            : 'hover:bg-[#d6e8f8] hover:border hover:border-[#b0cde8] border border-transparent'
+          }`}
+      >
+        <Icon className="w-[20px] h-[20px] text-[#333]" />
+        <span className="text-[9px] text-[#444] leading-tight">{label}</span>
+      </button>
+    )
+  }
   return (
     <button
       title={label}
       onClick={onClick}
       disabled={disabled}
-      className={`flex items-center justify-center w-[28px] h-[28px] rounded-[3px] transition-colors
+      className={`flex items-center justify-center w-[24px] h-[22px] rounded-[2px] transition-colors
         ${disabled ? 'opacity-40 cursor-not-allowed' : ''}
         ${active
-          ? 'bg-[#d6d6d6] border border-[#b0b0b0]'
-          : 'hover:bg-[#e8e8e8] hover:border hover:border-[#c8c8c8] border border-transparent'
+          ? 'bg-[#c6ddf7] border border-[#8cb8e8]'
+          : 'hover:bg-[#d6e8f8] hover:border hover:border-[#b0cde8] border border-transparent'
         }`}
     >
-      <Icon className="w-[14px] h-[14px] text-[#333]" />
+      <Icon className="w-[13px] h-[13px] text-[#333]" />
     </button>
   )
 }
 
-function WordSep() {
-  return <div className="w-px h-[20px] bg-[#c8c8c8] mx-[3px]" />
+function RibbonGroup({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col border-r border-[#d4d4d4] pr-[6px] mr-[6px] last:border-r-0 last:pr-0 last:mr-0">
+      <div className="flex items-center gap-[2px] py-[3px] min-h-[52px]">
+        {children}
+      </div>
+      <div className="text-[9px] text-[#666] text-center leading-none pb-[3px] select-none">{label}</div>
+    </div>
+  )
 }
 
-function WordRibbon({ editor }: { editor: ReturnType<typeof useEditor> }) {
+function WordHomeRibbon({ editor }: { editor: ReturnType<typeof useEditor> }) {
   if (!editor) return null
 
   return (
-    <div className="flex items-center gap-[2px] px-2 py-[5px] border-b border-[#d6d6d6] flex-wrap" style={{ background: '#f8f8f8' }}>
-      <WordBtn icon={Undo2} label="Undo (Ctrl+Z)" onClick={() => editor.chain().focus().undo().run()} disabled={!editor.can().undo()} />
-      <WordBtn icon={Redo2} label="Redo (Ctrl+Y)" onClick={() => editor.chain().focus().redo().run()} disabled={!editor.can().redo()} />
-      <WordSep />
+    <div className="flex items-stretch px-[6px] border-b border-[#d4d4d4]" style={{ background: '#f6f6f6' }}>
+      <RibbonGroup label="Clipboard">
+        <RibbonBtn icon={ClipboardPaste} label="Paste" size="lg" onClick={() => {}} />
+        <div className="flex flex-col gap-[1px]">
+          <RibbonBtn icon={Scissors} label="Cut" onClick={() => editor.chain().focus().run()} />
+          <RibbonBtn icon={Clipboard} label="Copy" onClick={() => editor.chain().focus().run()} />
+          <RibbonBtn icon={Paintbrush} label="Format Painter" onClick={() => {}} />
+        </div>
+      </RibbonGroup>
 
-      <WordBtn icon={Bold} label="Bold (Ctrl+B)" active={editor.isActive('bold')} onClick={() => editor.chain().focus().toggleBold().run()} />
-      <WordBtn icon={Italic} label="Italic (Ctrl+I)" active={editor.isActive('italic')} onClick={() => editor.chain().focus().toggleItalic().run()} />
-      <WordBtn icon={Underline} label="Underline (Ctrl+U)" active={editor.isActive('underline')} onClick={() => editor.chain().focus().toggleUnderline().run()} />
-      <WordBtn icon={Strikethrough} label="Strikethrough" active={editor.isActive('strike')} onClick={() => editor.chain().focus().toggleStrike().run()} />
-      <WordBtn icon={Subscript} label="Subscript" active={editor.isActive('subscript')} onClick={() => editor.chain().focus().toggleSubscript().run()} />
-      <WordBtn icon={Superscript} label="Superscript" active={editor.isActive('superscript')} onClick={() => editor.chain().focus().toggleSuperscript().run()} />
-      <WordSep />
+      <RibbonGroup label="Font">
+        <div className="flex flex-col gap-[3px]">
+          <div className="flex items-center gap-[2px]">
+            <select className="h-[22px] px-1 text-[11px] border border-[#bbb] bg-white text-[#333] w-[110px] focus:outline-none focus:border-[#5b9bd5] rounded-[2px]">
+              {['Calibri', 'Arial', 'Times New Roman', 'Cambria', 'Georgia', 'Verdana', 'Courier New'].map(f => (
+                <option key={f} value={f} style={{ fontFamily: f }}>{f}</option>
+              ))}
+            </select>
+            <select className="h-[22px] px-1 text-[11px] border border-[#bbb] bg-white text-[#333] w-[38px] focus:outline-none focus:border-[#5b9bd5] rounded-[2px]">
+              {['8', '9', '10', '11', '12', '14', '16', '18', '20', '24', '28', '36', '48', '72'].map(s => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+            <RibbonBtn icon={ChevronUp} label="Grow Font" onClick={() => {}} />
+            <RibbonBtn icon={ChevronDown} label="Shrink Font" onClick={() => {}} />
+          </div>
+          <div className="flex items-center gap-[1px]">
+            <RibbonBtn icon={Bold} label="Bold (Ctrl+B)" active={editor.isActive('bold')} onClick={() => editor.chain().focus().toggleBold().run()} />
+            <RibbonBtn icon={Italic} label="Italic (Ctrl+I)" active={editor.isActive('italic')} onClick={() => editor.chain().focus().toggleItalic().run()} />
+            <RibbonBtn icon={Underline} label="Underline (Ctrl+U)" active={editor.isActive('underline')} onClick={() => editor.chain().focus().toggleUnderline().run()} />
+            <RibbonBtn icon={Strikethrough} label="Strikethrough" active={editor.isActive('strike')} onClick={() => editor.chain().focus().toggleStrike().run()} />
+            <RibbonBtn icon={Subscript} label="Subscript" active={editor.isActive('subscript')} onClick={() => editor.chain().focus().toggleSubscript().run()} />
+            <RibbonBtn icon={Superscript} label="Superscript" active={editor.isActive('superscript')} onClick={() => editor.chain().focus().toggleSuperscript().run()} />
+            <div className="w-px h-[16px] bg-[#d4d4d4] mx-[2px]" />
+            <RibbonBtn icon={Highlighter} label="Text Highlight Color" active={editor.isActive('highlight')} onClick={() => editor.chain().focus().toggleHighlight().run()} />
+            <RibbonBtn icon={Type} label="Font Color" onClick={() => {}} />
+          </div>
+        </div>
+      </RibbonGroup>
 
-      <WordBtn icon={Highlighter} label="Highlight" active={editor.isActive('highlight')} onClick={() => editor.chain().focus().toggleHighlight().run()} />
-      <WordSep />
+      <RibbonGroup label="Paragraph">
+        <div className="flex flex-col gap-[3px]">
+          <div className="flex items-center gap-[1px]">
+            <RibbonBtn icon={List} label="Bullets" active={editor.isActive('bulletList')} onClick={() => editor.chain().focus().toggleBulletList().run()} />
+            <RibbonBtn icon={ListOrdered} label="Numbering" active={editor.isActive('orderedList')} onClick={() => editor.chain().focus().toggleOrderedList().run()} />
+            <div className="w-px h-[16px] bg-[#d4d4d4] mx-[2px]" />
+            <RibbonBtn icon={Outdent} label="Decrease Indent" onClick={() => editor.chain().focus().liftListItem('listItem').run()} />
+            <RibbonBtn icon={Indent} label="Increase Indent" onClick={() => editor.chain().focus().sinkListItem('listItem').run()} />
+          </div>
+          <div className="flex items-center gap-[1px]">
+            <RibbonBtn icon={AlignLeft} label="Align Left" active={editor.isActive({ textAlign: 'left' })} onClick={() => editor.chain().focus().setTextAlign('left').run()} />
+            <RibbonBtn icon={AlignCenter} label="Center" active={editor.isActive({ textAlign: 'center' })} onClick={() => editor.chain().focus().setTextAlign('center').run()} />
+            <RibbonBtn icon={AlignRight} label="Align Right" active={editor.isActive({ textAlign: 'right' })} onClick={() => editor.chain().focus().setTextAlign('right').run()} />
+            <RibbonBtn icon={AlignJustify} label="Justify" active={editor.isActive({ textAlign: 'justify' })} onClick={() => editor.chain().focus().setTextAlign('justify').run()} />
+          </div>
+        </div>
+      </RibbonGroup>
 
-      <WordBtn icon={AlignLeft} label="Align Left" active={editor.isActive({ textAlign: 'left' })} onClick={() => editor.chain().focus().setTextAlign('left').run()} />
-      <WordBtn icon={AlignCenter} label="Center" active={editor.isActive({ textAlign: 'center' })} onClick={() => editor.chain().focus().setTextAlign('center').run()} />
-      <WordBtn icon={AlignRight} label="Align Right" active={editor.isActive({ textAlign: 'right' })} onClick={() => editor.chain().focus().setTextAlign('right').run()} />
-      <WordBtn icon={AlignJustify} label="Justify" active={editor.isActive({ textAlign: 'justify' })} onClick={() => editor.chain().focus().setTextAlign('justify').run()} />
-      <WordSep />
-
-      <WordBtn icon={List} label="Bullet List" active={editor.isActive('bulletList')} onClick={() => editor.chain().focus().toggleBulletList().run()} />
-      <WordBtn icon={ListOrdered} label="Numbered List" active={editor.isActive('orderedList')} onClick={() => editor.chain().focus().toggleOrderedList().run()} />
-      <WordBtn icon={Outdent} label="Decrease Indent" onClick={() => editor.chain().focus().liftListItem('listItem').run()} />
-      <WordBtn icon={Indent} label="Increase Indent" onClick={() => editor.chain().focus().sinkListItem('listItem').run()} />
-      <WordSep />
-
-      <WordBtn icon={Minus} label="Horizontal Rule" onClick={() => editor.chain().focus().setHorizontalRule().run()} />
+      <RibbonGroup label="Editing">
+        <div className="flex flex-col gap-[1px]">
+          <RibbonBtn icon={Undo2} label="Undo" onClick={() => editor.chain().focus().undo().run()} disabled={!editor.can().undo()} />
+          <RibbonBtn icon={Redo2} label="Redo" onClick={() => editor.chain().focus().redo().run()} disabled={!editor.can().redo()} />
+          <RibbonBtn icon={Search} label="Find" onClick={() => {}} />
+        </div>
+      </RibbonGroup>
     </div>
   )
 }
@@ -2254,15 +2321,14 @@ function ConsolidateTab({ stackId }: { stackId: string }) {
 
       const headingLevel = section.level === 1 ? 'h2' : section.level === 2 ? 'h3' : 'h4'
       const amendedTag = isAmended
-        ? ` <span style="display:inline;padding:1px 6px;border-radius:3px;font-size:9px;font-weight:600;letter-spacing:0.3px;text-transform:uppercase;background:#e8e8e8;color:#666;border:1px solid #ccc;margin-left:8px;vertical-align:middle;">AMENDED</span>`
+        ? ` <span style="display:inline;padding:1px 6px;border-radius:3px;font-size:9px;font-weight:600;letter-spacing:0.3px;text-transform:uppercase;background:#fff3cd;color:#856404;border:1px solid #ffc107;margin-left:8px;vertical-align:middle;">AMENDED</span>`
         : ''
 
       html += `<${headingLevel} style="margin-left:${marginLeft}px;">${section.section_number}. ${section.section_title}${amendedTag}</${headingLevel}>`
 
       if (section.content) {
-        const borderLeft = isAmended ? 'border-left:3px solid #999;padding-left:12px;' : ''
-        const bg = isAmended ? 'background:#f5f5f5;padding:4px 6px;border-radius:2px;' : ''
-        html += `<p style="margin-left:${marginLeft}px;${borderLeft}${bg}">${section.content.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>`
+        const amendedStyle = isAmended ? 'background:#fff9e6;border-left:3px solid #ffc107;padding-left:12px;padding-top:4px;padding-bottom:4px;border-radius:2px;' : ''
+        html += `<p style="margin-left:${marginLeft}px;${amendedStyle}">${section.content.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>`
       }
 
       if (isAmended && section.amendment_source) {
@@ -2270,7 +2336,7 @@ function ConsolidateTab({ stackId }: { stackId: string }) {
         if (section.amendment_description) {
           annotation += ` — ${section.amendment_description}`
         }
-        html += `<p style="margin-left:${marginLeft}px;font-size:10px;color:#999;font-style:italic;">${annotation}</p>`
+        html += `<p style="margin-left:${marginLeft}px;font-size:10px;color:#856404;font-style:italic;">${annotation}</p>`
       }
 
       if (section.conflicts?.length) {
@@ -2301,7 +2367,7 @@ function ConsolidateTab({ stackId }: { stackId: string }) {
     return (
       <motion.div {...fadeUp} className="flex items-center justify-center py-24">
         <div className="flex flex-col items-center gap-4">
-          <Loader2 className="w-8 h-8 text-[#999] animate-spin" />
+          <Loader2 className="w-8 h-8 text-[#5b9bd5] animate-spin" />
           <p className="text-[13px] text-[#666] font-[Calibri,sans-serif]">Assembling consolidated contract...</p>
         </div>
       </motion.div>
@@ -2310,9 +2376,9 @@ function ConsolidateTab({ stackId }: { stackId: string }) {
 
   if (isError) {
     return (
-      <motion.div {...fadeUp} className="flex items-center gap-3 mx-auto max-w-2xl mt-12 px-6 py-4 bg-[#f5f5f5] border border-[#ddd] rounded">
-        <AlertTriangle className="w-5 h-5 text-[#666] flex-shrink-0" />
-        <p className="text-[13px] text-[#666] font-[Calibri,sans-serif]">
+      <motion.div {...fadeUp} className="flex items-center gap-3 mx-auto max-w-2xl mt-12 px-6 py-4 bg-[#fff5f5] border border-[#e0c8c8] rounded">
+        <AlertTriangle className="w-5 h-5 text-[#c00] flex-shrink-0" />
+        <p className="text-[13px] text-[#c00] font-[Calibri,sans-serif]">
           {(error as Error)?.message || 'Failed to load consolidated contract.'}
         </p>
       </motion.div>
@@ -2326,72 +2392,75 @@ function ConsolidateTab({ stackId }: { stackId: string }) {
   return (
     <motion.div {...fadeUp} className="flex flex-col" style={{ margin: '-8px -16px 0', fontFamily: 'Segoe UI, Calibri, sans-serif' }}>
 
-      {/* ── Title bar ─────────────────── */}
-      <div className="flex items-center h-[32px] px-3 gap-2" style={{ background: '#1d1d1f' }}>
-        <FileText className="w-4 h-4 text-white/80" />
+      {/* ── Title bar (Word blue) ───── */}
+      <div className="flex items-center h-[30px] px-3 gap-2" style={{ background: '#2b579a' }}>
+        <FileText className="w-[14px] h-[14px] text-white" />
         <span className="text-[12px] text-white font-medium tracking-wide">
           Consolidated_Contract.docx
         </span>
-        <span className="text-[10px] text-white/40 ml-1">— Digital Contract Platform</span>
+        <span className="text-[10px] text-white/50 ml-1">— Digital Contract Platform</span>
         <div className="flex-1" />
-        <span className="text-[10px] text-white/50">
+        <span className="text-[10px] text-white/60">
           {metadata.amended_sections} of {metadata.total_sections} sections amended
         </span>
-        <div className="flex items-center gap-1 ml-3">
-          <div className="w-[12px] h-[12px] rounded-sm bg-white/15 flex items-center justify-center">
-            <Minus className="w-[8px] h-[8px] text-white/70" />
+        <div className="flex items-center gap-[6px] ml-3">
+          <div className="w-[11px] h-[11px] rounded-sm bg-white/20 flex items-center justify-center cursor-pointer hover:bg-white/30">
+            <Minus className="w-[8px] h-[8px] text-white" />
           </div>
-          <div className="w-[12px] h-[12px] rounded-sm bg-white/15 flex items-center justify-center">
-            <div className="w-[7px] h-[7px] border border-white/70" />
+          <div className="w-[11px] h-[11px] rounded-sm bg-white/20 flex items-center justify-center cursor-pointer hover:bg-white/30">
+            <div className="w-[6px] h-[6px] border border-white" />
           </div>
-          <div className="w-[12px] h-[12px] rounded-sm bg-white/15 flex items-center justify-center">
-            <X className="w-[8px] h-[8px] text-white/70" />
+          <div className="w-[11px] h-[11px] rounded-sm bg-white/20 flex items-center justify-center cursor-pointer hover:bg-[#e81123]/80">
+            <X className="w-[8px] h-[8px] text-white" />
           </div>
         </div>
       </div>
 
-      {/* ── Ribbon tabs row ───────────── */}
-      <div className="flex items-center h-[28px] px-1 gap-0 border-b border-[#d6d6d6]" style={{ background: '#f3f3f3' }}>
+      {/* ── Quick Access Toolbar + Ribbon tabs ── */}
+      <div className="flex items-center h-[26px] px-1 gap-0 border-b border-[#d4d4d4]" style={{ background: '#eaecee' }}>
         {['File', 'Home', 'Insert', 'Design', 'Layout', 'References', 'Review', 'View'].map((tab, i) => (
           <button
             key={tab}
             onClick={() => setActiveRibbonTab(i)}
-            className={`px-3 h-full text-[11px] transition-colors ${
-              i === activeRibbonTab
-                ? 'bg-white text-[#1d1d1f] font-semibold border-t-2 border-t-[#1d1d1f] border-x border-x-[#d6d6d6]'
-                : 'text-[#666] hover:bg-[#e8e8e8]'
+            className={`px-[10px] h-full text-[11px] transition-colors ${
+              i === 0
+                ? 'text-white font-semibold rounded-[2px] mx-[2px]'
+                : i === activeRibbonTab
+                  ? 'bg-white text-[#2b579a] font-semibold border-t-[3px] border-t-[#2b579a] border-x border-x-[#d4d4d4]'
+                  : 'text-[#444] hover:bg-white/60'
             }`}
+            style={i === 0 ? { background: '#2b579a' } : undefined}
           >
             {tab}
           </button>
         ))}
       </div>
 
-      {/* ── Toolbar ribbon (Home tab) ── */}
-      {activeRibbonTab === 1 && <WordRibbon editor={editor} />}
+      {/* ── Ribbon content (Home tab) ── */}
+      {activeRibbonTab === 1 && <WordHomeRibbon editor={editor} />}
 
       {/* ── Ruler ─────────────────────── */}
-      <div className="h-[20px] border-b border-[#d6d6d6] flex items-end px-0 overflow-hidden" style={{ background: '#f8f8f8' }}>
-        <div className="relative w-full h-[16px]" style={{ marginLeft: '96px', marginRight: '96px' }}>
+      <div className="h-[18px] border-b border-[#d4d4d4] flex items-end px-0 overflow-hidden" style={{ background: '#f0f0f0' }}>
+        <div className="relative w-full h-[14px]" style={{ marginLeft: '96px', marginRight: '96px' }}>
           <div className="absolute inset-0 bg-white border-x border-[#c0c0c0]" />
           <div className="absolute inset-0 flex items-end">
             {Array.from({ length: 17 }, (_, i) => (
               <div key={i} className="flex-1 relative">
-                <div className="absolute bottom-0 left-0 w-px h-[6px] bg-[#999]" />
+                <div className="absolute bottom-0 left-0 w-px h-[5px] bg-[#888]" />
                 {i < 16 && (
-                  <span className="absolute bottom-[6px] left-[2px] text-[7px] text-[#666] leading-none select-none">
+                  <span className="absolute bottom-[5px] left-[2px] text-[7px] text-[#777] leading-none select-none">
                     {i + 1}
                   </span>
                 )}
-                <div className="absolute bottom-0 left-1/2 w-px h-[4px] bg-[#bbb]" />
+                <div className="absolute bottom-0 left-1/2 w-px h-[3px] bg-[#aaa]" />
               </div>
             ))}
           </div>
           <div className="absolute top-0 left-[0px]">
-            <div className="w-0 h-0 border-l-[5px] border-r-[5px] border-t-[5px] border-l-transparent border-r-transparent border-t-[#666]" />
+            <div className="w-0 h-0 border-l-[4px] border-r-[4px] border-t-[4px] border-l-transparent border-r-transparent border-t-[#555]" />
           </div>
           <div className="absolute bottom-0 left-[0px]">
-            <div className="w-0 h-0 border-l-[5px] border-r-[5px] border-b-[5px] border-l-transparent border-r-transparent border-b-[#666]" />
+            <div className="w-0 h-0 border-l-[4px] border-r-[4px] border-b-[4px] border-l-transparent border-r-transparent border-b-[#555]" />
           </div>
         </div>
       </div>
@@ -2399,41 +2468,41 @@ function ConsolidateTab({ stackId }: { stackId: string }) {
       {/* ── Document canvas ───────────── */}
       <div
         className="flex-1 overflow-auto flex justify-center"
-        style={{ background: '#e0e0e0', minHeight: '600px', maxHeight: 'calc(100vh - 320px)' }}
+        style={{ background: '#d4d4d4', minHeight: '600px', maxHeight: 'calc(100vh - 320px)' }}
       >
         <div
-          className="my-6 flex-shrink-0"
+          className="my-4 flex-shrink-0"
           style={{
             width: '816px',
             minHeight: '1056px',
             background: '#ffffff',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.12), 0 0 1px rgba(0,0,0,0.08)',
+            boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
           }}
         >
           <EditorContent editor={editor} />
         </div>
       </div>
 
-      {/* ── Status bar ────────────────── */}
-      <div className="flex items-center h-[24px] px-3 border-t border-[#d6d6d6]" style={{ background: '#1d1d1f' }}>
-        <span className="text-[10px] text-white/70">
+      {/* ── Status bar (Word blue) ───── */}
+      <div className="flex items-center h-[22px] px-3 border-t border-[#1a4a82]" style={{ background: '#2b579a' }}>
+        <span className="text-[10px] text-white/80">
           Page 1 of 1
         </span>
-        <span className="text-[10px] text-white/30 mx-2">|</span>
-        <span className="text-[10px] text-white/70">
+        <span className="text-[10px] text-white/40 mx-2">|</span>
+        <span className="text-[10px] text-white/80">
           {metadata.total_sections} Sections
         </span>
-        <span className="text-[10px] text-white/30 mx-2">|</span>
-        <span className="text-[10px] text-white/70">
+        <span className="text-[10px] text-white/40 mx-2">|</span>
+        <span className="text-[10px] text-white/80">
           {metadata.amended_sections} Amended
         </span>
         <div className="flex-1" />
         {metadata.appendices?.length > 0 && (
-          <span className="text-[10px] text-white/50 mr-3">
+          <span className="text-[10px] text-white/60 mr-3">
             Appendices: {metadata.appendices.join(', ')}
           </span>
         )}
-        <span className="text-[10px] text-white/40">English (US)</span>
+        <span className="text-[10px] text-white/50">English (US)</span>
         <div className="flex items-center gap-1 ml-3">
           {[100, 120, 150].map(z => (
             <button key={z} className={`text-[9px] px-1 rounded ${z === 100 ? 'text-white bg-white/20' : 'text-white/40 hover:text-white/70'}`}>
