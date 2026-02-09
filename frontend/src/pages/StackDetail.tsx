@@ -88,6 +88,27 @@ import TextAlign from '@tiptap/extension-text-align'
 import TiptapSubscript from '@tiptap/extension-subscript'
 import TiptapSuperscript from '@tiptap/extension-superscript'
 import TiptapHighlight from '@tiptap/extension-highlight'
+import { Node as TiptapNode } from '@tiptap/core'
+
+const PageBreakNode = TiptapNode.create({
+  name: 'pageBreak',
+  group: 'block',
+  atom: true,
+  selectable: false,
+  draggable: false,
+
+  parseHTML() {
+    return [{ tag: 'div[data-page-break]' }]
+  },
+
+  renderHTML() {
+    return ['div', {
+      'data-page-break': 'true',
+      contenteditable: 'false',
+      class: 'word-page-break-node',
+    }]
+  },
+})
 import { api } from '../api/client'
 import type { Conflict, QueryResponse, TimelineEntry, DocumentClause, SourceChainLink, ClauseConflict, ConsolidatedSection } from '../types'
 
@@ -2228,7 +2249,7 @@ function WordHomeRibbon({ editor }: { editor: ReturnType<typeof useEditor> }) {
   if (!editor) return null
 
   return (
-    <div className="flex items-stretch px-[6px] border-b border-[#d4d4d4]" style={{ background: '#f6f6f6' }}>
+    <div className="flex items-stretch px-[6px] border-b border-[#d4d4d4]" style={{ background: '#f3f3f3' }}>
       <RibbonGroup label="Clipboard">
         <RibbonBtn icon={ClipboardPaste} label="Paste" size="lg" onClick={() => {}} />
         <div className="flex flex-col gap-[1px]">
@@ -2369,59 +2390,84 @@ function ConsolidateTab({ stackId }: { stackId: string }) {
       TiptapSubscript,
       TiptapSuperscript,
       TiptapHighlight.configure({ multicolor: false }),
+      PageBreakNode,
     ],
     content: docHtml,
-    onUpdate: () => recalcPages(),
   }, [docHtml])
 
-  const recalcPages = useCallback(() => {
-    if (!editorContainerRef.current) return
-    const editorEl = editorContainerRef.current.querySelector('.ProseMirror') as HTMLElement | null
-    if (!editorEl) return
-    const contentHeight = editorEl.scrollHeight
-    const pages = Math.max(1, Math.ceil(contentHeight / PAGE_HEIGHT))
-    setPageCount(pages)
+  const PAGE_CONTENT_HEIGHT = PAGE_HEIGHT - PAGE_PADDING_TOP - PAGE_PADDING_BOTTOM
+  const paginatedRef = useRef(false)
 
-    const existingSeparators = editorContainerRef.current.querySelectorAll('.page-separator')
-    existingSeparators.forEach(el => el.remove())
+  const insertPageBreaks = useCallback(() => {
+    if (!editor || !editorContainerRef.current) return
+    if (paginatedRef.current) return
+    paginatedRef.current = true
 
-    for (let i = 1; i < pages; i++) {
-      const sep = document.createElement('div')
-      sep.className = 'page-separator'
-      sep.style.cssText = `position:absolute;left:0;right:0;height:${PAGE_GAP}px;top:${i * PAGE_HEIGHT}px;background:#a0a0a0;z-index:2;pointer-events:none;box-shadow:inset 0 2px 3px rgba(0,0,0,0.15), inset 0 -2px 3px rgba(0,0,0,0.15);`
-      editorContainerRef.current.appendChild(sep)
+    try {
+      const editorEl = editorContainerRef.current.querySelector('.ProseMirror') as HTMLElement | null
+      if (!editorEl) return
+
+      const doc = editor.state.doc
+      const breakPositions: number[] = []
+      let currentPageUsed = 0
+      doc.forEach((node, offset) => {
+        if (node.type.name === 'pageBreak') return
+        const absPos = offset + 1
+        const dom = editor.view.nodeDOM(absPos) as HTMLElement | null
+        if (!dom || !(dom instanceof HTMLElement)) return
+        const height = dom.getBoundingClientRect().height
+        if (height <= 0) return
+
+        if (currentPageUsed > 0 && currentPageUsed + height > PAGE_CONTENT_HEIGHT) {
+          breakPositions.push(absPos)
+          currentPageUsed = height
+        } else {
+          currentPageUsed += height
+        }
+      })
+
+      if (breakPositions.length > 0) {
+        let tr = editor.state.tr
+        let insertionOffset = 0
+        for (const pos of breakPositions) {
+          const adjustedPos = pos + insertionOffset
+          const pageBreakNodeType = editor.schema.nodes.pageBreak
+          tr = tr.insert(adjustedPos, pageBreakNodeType.create())
+          insertionOffset += 1
+        }
+        tr.setMeta('addToHistory', false)
+        editor.view.dispatch(tr)
+      }
+      setPageCount(breakPositions.length + 1)
+    } catch (_) {
     }
-
-    const totalHeight = pages * PAGE_HEIGHT + (pages - 1) * PAGE_GAP
-    editorEl.style.paddingBottom = `${PAGE_PADDING_BOTTOM + (pages - 1) * PAGE_GAP}px`
-    editorEl.style.minHeight = `${totalHeight}px`
-  }, [])
+  }, [editor])
 
   useEffect(() => {
+    paginatedRef.current = false
     const timers = [
-      setTimeout(recalcPages, 300),
-      setTimeout(recalcPages, 800),
-      setTimeout(recalcPages, 1500),
+      setTimeout(insertPageBreaks, 600),
+      setTimeout(insertPageBreaks, 1500),
     ]
-    let observer: ResizeObserver | null = null
-    if (editorContainerRef.current) {
-      observer = new ResizeObserver(() => recalcPages())
-      observer.observe(editorContainerRef.current)
-    }
     return () => {
       timers.forEach(t => clearTimeout(t))
-      observer?.disconnect()
     }
-  }, [docHtml, recalcPages])
+  }, [docHtml, insertPageBreaks])
 
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
     const handleScroll = () => {
+      if (!editorContainerRef.current) return
+      const breakNodes = editorContainerRef.current.querySelectorAll('.word-page-break-node')
       const scrollTop = canvas.scrollTop
-      const pageWithGap = PAGE_HEIGHT + PAGE_GAP
-      const page = Math.min(pageCount, Math.floor(scrollTop / pageWithGap) + 1)
-      setCurrentPage(page)
+      const containerTop = editorContainerRef.current.offsetTop
+      let page = 1
+      breakNodes.forEach(node => {
+        const nodeEl = node as HTMLElement
+        if (scrollTop > nodeEl.offsetTop - containerTop) page++
+      })
+      setCurrentPage(Math.min(page, pageCount))
     }
     canvas.addEventListener('scroll', handleScroll, { passive: true })
     return () => canvas.removeEventListener('scroll', handleScroll)
@@ -2480,20 +2526,20 @@ function ConsolidateTab({ stackId }: { stackId: string }) {
         </div>
       </div>
 
-      {/* ── Quick Access Toolbar + Ribbon tabs ── */}
-      <div className="flex items-center h-[26px] px-1 gap-0 border-b border-[#d4d4d4]" style={{ background: '#eaecee' }}>
+      {/* ── Ribbon tabs ── */}
+      <div className="flex items-end h-[28px] px-[2px] gap-0" style={{ background: '#2b579a' }}>
         {['File', 'Home', 'Insert', 'Design', 'Layout', 'References', 'Review', 'View'].map((tab, i) => (
           <button
             key={tab}
             onClick={() => setActiveRibbonTab(i)}
-            className={`px-[10px] h-full text-[11px] transition-colors ${
+            className={`px-[12px] text-[11.5px] tracking-[0.2px] border-0 outline-none cursor-pointer ${
               i === 0
-                ? 'text-white font-semibold rounded-[2px] mx-[2px]'
+                ? 'text-white font-medium py-[5px]'
                 : i === activeRibbonTab
-                  ? 'bg-white text-[#2b579a] font-semibold border-t-[3px] border-t-[#2b579a] border-x border-x-[#d4d4d4]'
-                  : 'text-[#444] hover:bg-white/60'
+                  ? 'text-[#333] bg-[#f3f3f3] py-[5px] rounded-t-[2px]'
+                  : 'text-white/80 hover:text-white hover:bg-white/10 py-[5px]'
             }`}
-            style={i === 0 ? { background: '#2b579a' } : undefined}
+            style={{ lineHeight: '1' }}
           >
             {tab}
           </button>

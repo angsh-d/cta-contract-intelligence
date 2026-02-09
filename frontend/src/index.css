@@ -78,6 +78,21 @@ body {
 .word-pages-container {
   position: relative;
 }
+.word-page-break-node {
+  height: 164px;
+  margin: 0 -96px;
+  pointer-events: none;
+  user-select: none;
+  background: linear-gradient(to bottom,
+    white 0px,
+    white 72px,
+    #a0a0a0 72px,
+    #a0a0a0 92px,
+    white 92px,
+    white 164px
+  );
+  box-shadow: inset 0 4px 6px -3px rgba(0,0,0,0.1), inset 0 -4px 6px -3px rgba(0,0,0,0.1);
+}
 .tiptap.ProseMirror h2 {
   font-size: 16px;
   font-weight: bold;
