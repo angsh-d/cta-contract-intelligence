@@ -497,7 +497,7 @@ export default function Landing() {
       <section className="py-32 sm:py-40 px-6 bg-apple-black">
         <FadeUp className="text-center">
           <h2 className="text-[44px] sm:text-[56px] lg:text-[64px] font-bold tracking-[-0.03em] text-white leading-[1.05] mb-6">
-            Ready to see the truth?
+            Ready to try out the Agents?
           </h2>
           <p className="text-[19px] text-apple-gray max-w-[520px] mx-auto mb-12 leading-[1.5]">
             Start analyzing your clinical trial agreements with AI-powered intelligence.
