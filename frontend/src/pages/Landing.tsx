@@ -104,8 +104,8 @@ const steps = [
   { num: '01', icon: Upload, title: 'Upload', description: 'Upload your CTA and amendments. PDFs are parsed by specialized document agents that understand clinical trial agreement structure.' },
   { num: '02', icon: Cpu, title: 'Process', description: '9 AI agents extract clauses, track amendments, resolve overrides, map dependencies. Every change is sequenced and verified.' },
   { num: '03', icon: Search, title: 'Analyze', description: 'Query in natural language. AI reconstructs truth from the full amendment chain, citing sources and confidence levels.' },
-  { num: '04', icon: FilePlus2, title: 'Consolidate', description: 'Generate a single, unified contract with all amendments applied. Review changes in a Word-style editor with amendment tracking and export to DOCX or PDF.' },
-  { num: '05', icon: CheckCircle2, title: 'Decide', description: 'Detect conflicts, analyze ripple effects, and make data-driven decisions with complete, verified contract intelligence.' },
+  { num: '04', icon: CheckCircle2, title: 'Synthesize', description: 'Detect conflicts, analyze ripple effects, and make data-driven decisions with complete, verified contract intelligence.' },
+  { num: '05', icon: FilePlus2, title: 'Consolidate', description: 'Generate a single, unified contract with all amendments applied. Review changes in a Word-style editor with amendment tracking and export to DOCX or PDF.' },
 ]
 
 const agentTiers = [
