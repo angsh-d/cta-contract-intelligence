@@ -94,6 +94,8 @@ alembic upgrade head
 - No colors (blue, green, orange, red) — only blacks, greys, whites
 
 ## Recent Changes
+- 2026-02-09: File menu with Save As — export clean DOCX (via `docx` lib) and PDF (via `jsPDF`) with all highlights/badges/tags stripped
+- 2026-02-09: Page breaks now use custom TipTap PageBreakNode (schema-level, not overlays) for real layout gaps
 - 2026-02-07: Initial Replit setup - configured PostgreSQL, ran migrations
 - 2026-02-07: Built complete Apple-inspired React frontend with 5 pages
 - 2026-02-07: Fixed DB connection to prefer DATABASE_URL over EXTERNAL_DATABASE_URL

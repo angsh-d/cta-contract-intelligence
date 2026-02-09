@@ -67,6 +67,8 @@ import {
   Paintbrush,
   Type,
   ChevronUp,
+  Download,
+  Save,
 } from 'lucide-react'
 import {
   useStack,
@@ -89,6 +91,9 @@ import TiptapSubscript from '@tiptap/extension-subscript'
 import TiptapSuperscript from '@tiptap/extension-superscript'
 import TiptapHighlight from '@tiptap/extension-highlight'
 import { Node as TiptapNode } from '@tiptap/core'
+import { Document as DocxDocument, Packer, Paragraph, TextRun, HeadingLevel } from 'docx'
+import { saveAs } from 'file-saver'
+import jsPDF from 'jspdf'
 
 const PageBreakNode = TiptapNode.create({
   name: 'pageBreak',
@@ -2321,6 +2326,9 @@ function WordHomeRibbon({ editor }: { editor: ReturnType<typeof useEditor> }) {
 function ConsolidateTab({ stackId }: { stackId: string }) {
   const { data, isLoading, isError, error } = useConsolidatedContract(stackId)
   const [activeRibbonTab, setActiveRibbonTab] = useState(1)
+  const [showFileMenu, setShowFileMenu] = useState(false)
+  const [showSaveAsSubmenu, setShowSaveAsSubmenu] = useState(false)
+  const fileMenuRef = useRef<HTMLDivElement>(null)
 
   const flattenSections = (sections: ConsolidatedSection[], depth: number = 0): Array<{ section: ConsolidatedSection; depth: number }> => {
     const result: Array<{ section: ConsolidatedSection; depth: number }> = []
@@ -2367,6 +2375,157 @@ function ConsolidateTab({ stackId }: { stackId: string }) {
       }
     }
     return html
+  }
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (fileMenuRef.current && !fileMenuRef.current.contains(e.target as Node)) {
+        setShowFileMenu(false)
+        setShowSaveAsSubmenu(false)
+      }
+    }
+    if (showFileMenu) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showFileMenu])
+
+  const sanitizeText = (text: string): string => {
+    let clean = text
+    clean = clean.replace(/<[^>]*>/g, '')
+    clean = clean.replace(/\s*AMENDED\s*/gi, '')
+    clean = clean.replace(/\[AMENDED\]/gi, '')
+    clean = clean.replace(/&amp;/g, '&')
+    clean = clean.replace(/&lt;/g, '<')
+    clean = clean.replace(/&gt;/g, '>')
+    clean = clean.replace(/&nbsp;/g, ' ')
+    clean = clean.replace(/&quot;/g, '"')
+    clean = clean.replace(/\s{2,}/g, ' ')
+    return clean.trim()
+  }
+
+  const exportAsDocx = async () => {
+    if (!data) return
+    setShowFileMenu(false)
+    setShowSaveAsSubmenu(false)
+
+    const flat = flattenSections(data.document_structure)
+    const children: Paragraph[] = []
+
+    for (const { section } of flat) {
+      const level = section.level === 1 ? HeadingLevel.HEADING_2 : section.level === 2 ? HeadingLevel.HEADING_3 : HeadingLevel.HEADING_4
+      const cleanTitle = sanitizeText(`${section.section_number}. ${section.section_title}`)
+
+      children.push(new Paragraph({
+        heading: level,
+        children: [
+          new TextRun({
+            text: cleanTitle,
+            bold: true,
+          }),
+        ],
+      }))
+
+      if (section.content) {
+        const cleanContent = sanitizeText(section.content)
+        const lines = cleanContent.split('\n')
+        for (const line of lines) {
+          const trimmed = line.trim()
+          if (!trimmed) continue
+
+          const isBullet = trimmed.startsWith('•') || trimmed.startsWith('-') || trimmed.startsWith('*')
+          const bulletText = isBullet ? trimmed.replace(/^[•\-*]\s*/, '') : trimmed
+
+          children.push(new Paragraph({
+            bullet: isBullet ? { level: 0 } : undefined,
+            children: [
+              new TextRun({
+                text: bulletText,
+                size: 22,
+                font: 'Calibri',
+              }),
+            ],
+            spacing: { after: 120 },
+          }))
+        }
+      }
+    }
+
+    const doc = new DocxDocument({
+      sections: [{
+        properties: {
+          page: {
+            margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 },
+          },
+        },
+        children,
+      }],
+    })
+
+    const blob = await Packer.toBlob(doc)
+    saveAs(blob, 'Consolidated_Contract.docx')
+  }
+
+  const exportAsPdf = async () => {
+    if (!data) return
+    setShowFileMenu(false)
+    setShowSaveAsSubmenu(false)
+
+    const flat = flattenSections(data.document_structure)
+    const pdf = new jsPDF({
+      orientation: 'portrait',
+      unit: 'pt',
+      format: 'letter',
+    })
+
+    const pageWidth = pdf.internal.pageSize.getWidth()
+    const pageHeight = pdf.internal.pageSize.getHeight()
+    const marginLeft = 72
+    const marginRight = 72
+    const marginTop = 72
+    const marginBottom = 72
+    const maxWidth = pageWidth - marginLeft - marginRight
+    let y = marginTop
+
+    const addPage = () => {
+      pdf.addPage()
+      y = marginTop
+    }
+
+    const checkSpace = (needed: number) => {
+      if (y + needed > pageHeight - marginBottom) {
+        addPage()
+      }
+    }
+
+    for (const { section } of flat) {
+      const headingSize = section.level === 1 ? 14 : section.level === 2 ? 12 : 11
+      const cleanTitle = sanitizeText(`${section.section_number}. ${section.section_title}`)
+
+      checkSpace(headingSize + 20)
+      y += 8
+      pdf.setFont('helvetica', 'bold')
+      pdf.setFontSize(headingSize)
+      const headingLines = pdf.splitTextToSize(cleanTitle, maxWidth)
+      pdf.text(headingLines, marginLeft, y)
+      y += headingLines.length * (headingSize + 2) + 6
+
+      if (section.content) {
+        const cleanContent = sanitizeText(section.content)
+        pdf.setFont('helvetica', 'normal')
+        pdf.setFontSize(10)
+        const contentLines = pdf.splitTextToSize(cleanContent, maxWidth)
+
+        for (const line of contentLines) {
+          checkSpace(14)
+          pdf.text(line, marginLeft, y)
+          y += 13
+        }
+        y += 4
+      }
+    }
+
+    pdf.save('Consolidated_Contract.pdf')
   }
 
   const docHtml = data ? buildDocumentHtml(data.document_structure) : ''
@@ -2500,7 +2659,7 @@ function ConsolidateTab({ stackId }: { stackId: string }) {
   const { metadata } = data
 
   return (
-    <motion.div {...fadeUp} className="flex flex-col" style={{ margin: '-8px -16px 0', fontFamily: 'Segoe UI, Calibri, sans-serif' }}>
+    <motion.div {...fadeUp} className="flex flex-col relative" style={{ margin: '-8px -16px 0', fontFamily: 'Segoe UI, Calibri, sans-serif' }}>
 
       {/* ── Title bar (Word blue) ───── */}
       <div className="flex items-center h-[30px] px-3 gap-2" style={{ background: '#2b579a' }}>
@@ -2527,14 +2686,25 @@ function ConsolidateTab({ stackId }: { stackId: string }) {
       </div>
 
       {/* ── Ribbon tabs ── */}
-      <div className="flex items-end h-[28px] px-[2px] gap-0" style={{ background: '#2b579a' }}>
+      <div className="flex items-end h-[28px] px-[2px] gap-0 relative" style={{ background: '#2b579a' }}>
         {['File', 'Home', 'Insert', 'Design', 'Layout', 'References', 'Review', 'View'].map((tab, i) => (
           <button
             key={tab}
-            onClick={() => setActiveRibbonTab(i)}
+            onClick={() => {
+              if (i === 0) {
+                setShowFileMenu(!showFileMenu)
+                setShowSaveAsSubmenu(false)
+              } else {
+                setActiveRibbonTab(i)
+                setShowFileMenu(false)
+                setShowSaveAsSubmenu(false)
+              }
+            }}
             className={`px-[12px] text-[11.5px] tracking-[0.2px] border-0 outline-none cursor-pointer ${
               i === 0
-                ? 'text-white font-medium py-[5px]'
+                ? showFileMenu
+                  ? 'text-white font-medium py-[5px] bg-[#1a4a82]'
+                  : 'text-white font-medium py-[5px]'
                 : i === activeRibbonTab
                   ? 'text-[#333] bg-[#f3f3f3] py-[5px] rounded-t-[2px]'
                   : 'text-white/80 hover:text-white hover:bg-white/10 py-[5px]'
@@ -2545,6 +2715,78 @@ function ConsolidateTab({ stackId }: { stackId: string }) {
           </button>
         ))}
       </div>
+
+      {/* ── File Menu Dropdown ── */}
+      {showFileMenu && (
+        <div
+          ref={fileMenuRef}
+          className="absolute z-50 bg-white border border-[#c8c8c8] shadow-lg"
+          style={{ top: '58px', left: '2px', width: '220px', fontFamily: 'Segoe UI, sans-serif' }}
+        >
+          <div className="py-[2px]">
+            <button
+              className="w-full text-left px-4 py-[6px] text-[12px] text-[#333] hover:bg-[#e8e8e8] flex items-center gap-3"
+              onClick={() => { setShowFileMenu(false) }}
+            >
+              <Save className="w-[14px] h-[14px] text-[#666]" />
+              Save
+            </button>
+
+            <div
+              className="relative"
+              onMouseEnter={() => setShowSaveAsSubmenu(true)}
+              onMouseLeave={() => setShowSaveAsSubmenu(false)}
+            >
+              <button
+                className="w-full text-left px-4 py-[6px] text-[12px] text-[#333] hover:bg-[#e8e8e8] flex items-center gap-3 justify-between"
+              >
+                <span className="flex items-center gap-3">
+                  <Download className="w-[14px] h-[14px] text-[#666]" />
+                  Save As...
+                </span>
+                <ChevronRight className="w-[10px] h-[10px] text-[#999]" />
+              </button>
+
+              {showSaveAsSubmenu && (
+                <div
+                  className="absolute left-[218px] top-[-2px] bg-white border border-[#c8c8c8] shadow-lg z-50"
+                  style={{ width: '200px' }}
+                >
+                  <div className="py-[2px]">
+                    <div className="px-4 py-[6px] text-[10px] text-[#888] uppercase tracking-wide">
+                      Download Clean Copy
+                    </div>
+                    <button
+                      className="w-full text-left px-4 py-[7px] text-[12px] text-[#333] hover:bg-[#e8e8e8] flex items-center gap-3"
+                      onClick={exportAsDocx}
+                    >
+                      <FileText className="w-[14px] h-[14px] text-[#2b579a]" />
+                      Word Document (.docx)
+                    </button>
+                    <button
+                      className="w-full text-left px-4 py-[7px] text-[12px] text-[#333] hover:bg-[#e8e8e8] flex items-center gap-3"
+                      onClick={exportAsPdf}
+                    >
+                      <FileText className="w-[14px] h-[14px] text-[#c00]" />
+                      PDF Document (.pdf)
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="my-[2px] border-t border-[#e0e0e0] mx-2" />
+
+            <button
+              className="w-full text-left px-4 py-[6px] text-[12px] text-[#333] hover:bg-[#e8e8e8] flex items-center gap-3"
+              onClick={() => setShowFileMenu(false)}
+            >
+              <X className="w-[14px] h-[14px] text-[#666]" />
+              Close
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Ribbon content (Home tab) ── */}
       {activeRibbonTab === 1 && <WordHomeRibbon editor={editor} />}
