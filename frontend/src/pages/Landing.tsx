@@ -10,6 +10,7 @@ import {
   Cpu,
   Search,
   CheckCircle2,
+  FilePlus2,
   ArrowRight,
   Network,
   Zap,
@@ -103,7 +104,8 @@ const steps = [
   { num: '01', icon: Upload, title: 'Upload', description: 'Upload your CTA and amendments. PDFs are parsed by specialized document agents that understand clinical trial agreement structure.' },
   { num: '02', icon: Cpu, title: 'Process', description: '9 AI agents extract clauses, track amendments, resolve overrides, map dependencies. Every change is sequenced and verified.' },
   { num: '03', icon: Search, title: 'Analyze', description: 'Query in natural language. AI reconstructs truth from the full amendment chain, citing sources and confidence levels.' },
-  { num: '04', icon: CheckCircle2, title: 'Decide', description: 'Detect conflicts, analyze ripple effects, and make data-driven decisions with complete, verified contract intelligence.' },
+  { num: '04', icon: FilePlus2, title: 'Consolidate', description: 'Generate a single, unified contract with all amendments applied. Review changes in a Word-style editor with amendment tracking and export to DOCX or PDF.' },
+  { num: '05', icon: CheckCircle2, title: 'Decide', description: 'Detect conflicts, analyze ripple effects, and make data-driven decisions with complete, verified contract intelligence.' },
 ]
 
 const agentTiers = [
@@ -475,16 +477,16 @@ export default function Landing() {
             </h2>
           </FadeUp>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10 lg:gap-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-10 lg:gap-8">
             {steps.map((step, i) => (
               <FadeUp key={step.title} delay={i * 0.12}>
                 <div className="text-center sm:text-left">
-                  <span className="text-[64px] font-bold text-apple-silver tracking-[-0.04em] leading-none">{step.num}</span>
-                  <div className="w-14 h-14 rounded-2xl bg-apple-bg flex items-center justify-center mt-6 mb-6 mx-auto sm:mx-0">
-                    <step.icon className="w-7 h-7 text-apple-dark" />
+                  <span className="text-[56px] lg:text-[52px] font-bold text-apple-silver tracking-[-0.04em] leading-none">{step.num}</span>
+                  <div className="w-12 h-12 lg:w-11 lg:h-11 rounded-2xl bg-apple-bg flex items-center justify-center mt-5 mb-5 mx-auto sm:mx-0">
+                    <step.icon className="w-6 h-6 text-apple-dark" />
                   </div>
-                  <h3 className="text-[22px] font-bold text-apple-black tracking-[-0.01em] mb-3">{step.title}</h3>
-                  <p className="text-[15px] text-apple-gray leading-[1.6]">{step.description}</p>
+                  <h3 className="text-[20px] font-bold text-apple-black tracking-[-0.01em] mb-2">{step.title}</h3>
+                  <p className="text-[14px] text-apple-gray leading-[1.6]">{step.description}</p>
                 </div>
               </FadeUp>
             ))}
