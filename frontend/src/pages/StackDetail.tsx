@@ -2316,19 +2316,19 @@ function ConsolidateTab({ stackId }: { stackId: string }) {
     const flat = flattenSections(sections)
     let html = ''
     for (const { section, depth } of flat) {
-      const marginLeft = depth * 36
       const isAmended = section.is_amended
-
       const headingLevel = section.level === 1 ? 'h2' : section.level === 2 ? 'h3' : 'h4'
-      const amendedTag = isAmended
-        ? ` <span style="display:inline;padding:1px 6px;border-radius:3px;font-size:9px;font-weight:600;letter-spacing:0.3px;text-transform:uppercase;background:#fff3cd;color:#856404;border:1px solid #ffc107;margin-left:8px;vertical-align:middle;">AMENDED</span>`
-        : ''
+      const amendedLabel = isAmended ? ' <strong>AMENDED</strong>' : ''
 
-      html += `<${headingLevel} style="margin-left:${marginLeft}px;">${section.section_number}. ${section.section_title}${amendedTag}</${headingLevel}>`
+      html += `<${headingLevel}>${section.section_number}. ${section.section_title}${amendedLabel}</${headingLevel}>`
 
       if (section.content) {
-        const amendedStyle = isAmended ? 'background:#fff9e6;border-left:3px solid #ffc107;padding-left:12px;padding-top:4px;padding-bottom:4px;border-radius:2px;' : ''
-        html += `<p style="margin-left:${marginLeft}px;${amendedStyle}">${section.content.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>`
+        const escaped = section.content.replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        if (isAmended) {
+          html += `<p><mark>${escaped}</mark></p>`
+        } else {
+          html += `<p>${escaped}</p>`
+        }
       }
 
       if (isAmended && section.amendment_source) {
@@ -2336,12 +2336,12 @@ function ConsolidateTab({ stackId }: { stackId: string }) {
         if (section.amendment_description) {
           annotation += ` — ${section.amendment_description}`
         }
-        html += `<p style="margin-left:${marginLeft}px;font-size:10px;color:#856404;font-style:italic;">${annotation}</p>`
+        html += `<p><em>${annotation}</em></p>`
       }
 
       if (section.conflicts?.length) {
         for (const c of section.conflicts) {
-          html += `<blockquote style="margin-left:${marginLeft}px;border-left:3px solid #999;padding:4px 8px;background:#f0f0f0;font-size:11px;color:#555;"><strong style="text-transform:uppercase;font-size:9px;letter-spacing:0.3px;">${c.severity}</strong>: ${c.description}</blockquote>`
+          html += `<blockquote><strong>${c.severity}</strong>: ${c.description}</blockquote>`
         }
       }
     }
@@ -2349,6 +2349,16 @@ function ConsolidateTab({ stackId }: { stackId: string }) {
   }
 
   const docHtml = data ? buildDocumentHtml(data.document_structure) : ''
+
+  const editorContainerRef = useRef<HTMLDivElement>(null)
+  const canvasRef = useRef<HTMLDivElement>(null)
+  const [pageCount, setPageCount] = useState(1)
+  const [currentPage, setCurrentPage] = useState(1)
+
+  const PAGE_HEIGHT = 1056
+  const PAGE_PADDING_TOP = 72
+  const PAGE_PADDING_BOTTOM = 72
+  const PAGE_GAP = 20
 
   const editor = useEditor({
     extensions: [
@@ -2361,7 +2371,61 @@ function ConsolidateTab({ stackId }: { stackId: string }) {
       TiptapHighlight.configure({ multicolor: false }),
     ],
     content: docHtml,
+    onUpdate: () => recalcPages(),
   }, [docHtml])
+
+  const recalcPages = useCallback(() => {
+    if (!editorContainerRef.current) return
+    const editorEl = editorContainerRef.current.querySelector('.ProseMirror') as HTMLElement | null
+    if (!editorEl) return
+    const contentHeight = editorEl.scrollHeight
+    const pages = Math.max(1, Math.ceil(contentHeight / PAGE_HEIGHT))
+    setPageCount(pages)
+
+    const existingSeparators = editorContainerRef.current.querySelectorAll('.page-separator')
+    existingSeparators.forEach(el => el.remove())
+
+    for (let i = 1; i < pages; i++) {
+      const sep = document.createElement('div')
+      sep.className = 'page-separator'
+      sep.style.cssText = `position:absolute;left:0;right:0;height:${PAGE_GAP}px;top:${i * PAGE_HEIGHT}px;background:#a0a0a0;z-index:2;pointer-events:none;box-shadow:inset 0 2px 3px rgba(0,0,0,0.15), inset 0 -2px 3px rgba(0,0,0,0.15);`
+      editorContainerRef.current.appendChild(sep)
+    }
+
+    const totalHeight = pages * PAGE_HEIGHT + (pages - 1) * PAGE_GAP
+    editorEl.style.paddingBottom = `${PAGE_PADDING_BOTTOM + (pages - 1) * PAGE_GAP}px`
+    editorEl.style.minHeight = `${totalHeight}px`
+  }, [])
+
+  useEffect(() => {
+    const timers = [
+      setTimeout(recalcPages, 300),
+      setTimeout(recalcPages, 800),
+      setTimeout(recalcPages, 1500),
+    ]
+    let observer: ResizeObserver | null = null
+    if (editorContainerRef.current) {
+      observer = new ResizeObserver(() => recalcPages())
+      observer.observe(editorContainerRef.current)
+    }
+    return () => {
+      timers.forEach(t => clearTimeout(t))
+      observer?.disconnect()
+    }
+  }, [docHtml, recalcPages])
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const handleScroll = () => {
+      const scrollTop = canvas.scrollTop
+      const pageWithGap = PAGE_HEIGHT + PAGE_GAP
+      const page = Math.min(pageCount, Math.floor(scrollTop / pageWithGap) + 1)
+      setCurrentPage(page)
+    }
+    canvas.addEventListener('scroll', handleScroll, { passive: true })
+    return () => canvas.removeEventListener('scroll', handleScroll)
+  }, [pageCount])
 
   if (isLoading) {
     return (
@@ -2465,28 +2529,27 @@ function ConsolidateTab({ stackId }: { stackId: string }) {
         </div>
       </div>
 
-      {/* ── Document canvas ───────────── */}
+      {/* ── Document canvas with visual pages ── */}
       <div
-        className="flex-1 overflow-auto flex justify-center"
-        style={{ background: '#d4d4d4', minHeight: '600px', maxHeight: 'calc(100vh - 320px)' }}
+        ref={canvasRef}
+        className="flex-1 overflow-auto"
+        style={{ background: '#a0a0a0', minHeight: '600px', maxHeight: 'calc(100vh - 320px)' }}
       >
-        <div
-          className="my-4 flex-shrink-0"
-          style={{
-            width: '816px',
-            minHeight: '1056px',
-            background: '#ffffff',
-            boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
-          }}
-        >
-          <EditorContent editor={editor} />
+        <div className="flex flex-col items-center py-4">
+          <div
+            ref={editorContainerRef}
+            className="word-pages-container flex-shrink-0"
+            style={{ width: '816px' }}
+          >
+            <EditorContent editor={editor} />
+          </div>
         </div>
       </div>
 
       {/* ── Status bar (Word blue) ───── */}
       <div className="flex items-center h-[22px] px-3 border-t border-[#1a4a82]" style={{ background: '#2b579a' }}>
         <span className="text-[10px] text-white/80">
-          Page 1 of 1
+          Page {currentPage} of {pageCount}
         </span>
         <span className="text-[10px] text-white/40 mx-2">|</span>
         <span className="text-[10px] text-white/80">

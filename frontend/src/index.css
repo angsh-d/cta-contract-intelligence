@@ -64,14 +64,19 @@ body {
   border-radius: 8px;
 }
 
-.tiptap.ProseMirror {
+/* ── Word Pages Container — multi-page visual rendering ── */
+.word-pages-container .tiptap.ProseMirror {
   outline: none;
-  padding: 96px;
-  min-height: 1056px;
   font-family: Calibri, sans-serif;
   font-size: 11pt;
   line-height: 1.6;
   color: #333;
+  padding: 72px 96px;
+  background: white;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.25), 0 0 1px rgba(0,0,0,0.1);
+}
+.word-pages-container {
+  position: relative;
 }
 .tiptap.ProseMirror h2 {
   font-size: 16px;
@@ -106,10 +111,53 @@ body {
   font-size: 11px;
   color: #555;
 }
+/* ── Yellow highlighting for amended sections ── */
 .tiptap.ProseMirror mark {
-  background: #fff3cd;
-  padding: 1px 2px;
+  background: #fff9e6;
+  border-left: 3px solid #ffc107;
+  padding: 4px 10px;
   border-radius: 2px;
+  display: inline;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+.tiptap.ProseMirror p:has(> mark) {
+  background: #fff9e6;
+  border-left: 3px solid #ffc107;
+  padding: 6px 12px;
+  border-radius: 2px;
+  margin-top: 2px;
+  margin-bottom: 2px;
+}
+.tiptap.ProseMirror p:has(> mark) mark {
+  background: transparent;
+  border-left: none;
+  padding: 0;
+}
+/* AMENDED badge in headings */
+.tiptap.ProseMirror h2 strong,
+.tiptap.ProseMirror h3 strong,
+.tiptap.ProseMirror h4 strong {
+  font-weight: 700;
+}
+/* Style "AMENDED" text as a badge */
+.tiptap.ProseMirror :is(h2, h3, h4) strong:last-child {
+  font-size: 9px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  background: #fff3cd;
+  color: #856404;
+  border: 1px solid #ffc107;
+  padding: 1px 6px;
+  border-radius: 3px;
+  margin-left: 8px;
+  vertical-align: middle;
+  font-weight: 600;
+}
+/* Amendment annotation (italic text after amended content) */
+.tiptap.ProseMirror p em:only-child {
+  font-size: 10px;
+  color: #856404;
 }
 .tiptap.ProseMirror ul,
 .tiptap.ProseMirror ol {
