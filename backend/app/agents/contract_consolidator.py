@@ -119,7 +119,13 @@ class ContractConsolidatorAgent(BaseAgent):
         clause_data = clause_lookup.get(section_num, {})
         source_chain = clause_data.get("source_chain", [])
 
-        is_amended = item.get("is_amended", len(source_chain) > 1)
+        _chain_amended = len(source_chain) > 1
+        if not _chain_amended and source_chain:
+            last_link = source_chain[-1] if isinstance(source_chain[-1], dict) else {}
+            mod_type = last_link.get("modification_type") or ""
+            if mod_type and mod_type not in ("original", "none", "None"):
+                _chain_amended = True
+        is_amended = item.get("is_amended", _chain_amended)
         amendment_source = item.get("amendment_source")
         amendment_description = item.get("amendment_description")
 
@@ -153,6 +159,11 @@ class ContractConsolidatorAgent(BaseAgent):
         """Create a ConsolidatedSection directly from clause data (for LLM-missed clauses)."""
         source_chain = clause_data.get("source_chain", [])
         is_amended = len(source_chain) > 1
+        if not is_amended and source_chain:
+            last = source_chain[-1] if isinstance(source_chain[-1], dict) else {}
+            mod_type = last.get("modification_type") or ""
+            if mod_type and mod_type not in ("original", "none", "None"):
+                is_amended = True
         amendment_source = None
         amendment_description = None
         if is_amended and source_chain:

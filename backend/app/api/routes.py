@@ -349,13 +349,6 @@ async def get_consolidated_contract(stack_id: str, request: Request):
     pool = request.app.state.postgres_pool
     stack_uuid = _parse_uuid(stack_id, "stack_id")
 
-    # Check cache first
-    cache_key = f"consolidated:{stack_id}"
-    cached = await orchestrator.cache.get(cache_key)
-    if cached:
-        logger.info("Consolidated contract CACHE HIT for %s", stack_id)
-        return json.loads(cached)
-
     # Fetch all current clauses with source_chain and document info
     async with pool.acquire() as conn:
         rows = await conn.fetch(
@@ -368,7 +361,6 @@ async def get_consolidated_contract(stack_id: str, request: Request):
             "ORDER BY c.section_number",
             stack_uuid,
         )
-        # Also fetch conflicts for annotation
         conflict_rows = await conn.fetch(
             "SELECT conflict_id, conflict_type, severity, description, "
             "affected_sections, recommendation "
@@ -379,7 +371,6 @@ async def get_consolidated_contract(stack_id: str, request: Request):
     if not rows:
         raise HTTPException(status_code=404, detail="No resolved clauses found — run the pipeline first")
 
-    # Build clause dicts with parsed source_chain
     clauses = []
     for r in rows:
         raw_chain = r["source_chain"]
@@ -394,6 +385,47 @@ async def get_consolidated_contract(stack_id: str, request: Request):
             "source_document_id": str(r["source_document_id"]) if r["source_document_id"] else None,
             "source_filename": r["source_filename"],
         })
+
+    # Build amendment lookup from clause source chains
+    amended_sections: set[str] = set()
+    for c in clauses:
+        sc = c.get("source_chain", [])
+        if sc:
+            last = sc[-1] if isinstance(sc[-1], dict) else {}
+            mod = last.get("modification_type") or ""
+            if mod and mod.lower() not in ("original", "none", ""):
+                amended_sections.add(c["section_number"])
+
+    def _apply_amended_flags(result_json: dict) -> None:
+        """Fix is_amended on document_structure and update metadata count."""
+        amended_count = [0]
+        total_count = [0]
+        def _walk(sections: list[dict]) -> None:
+            for section in sections:
+                total_count[0] += 1
+                if section.get("section_number", "") in amended_sections:
+                    section["is_amended"] = True
+                if section.get("is_amended"):
+                    amended_count[0] += 1
+                _walk(section.get("subsections", []))
+        _walk(result_json.get("document_structure", []))
+        if "metadata" in result_json:
+            result_json["metadata"]["amended_sections"] = amended_count[0]
+            result_json["metadata"]["total_sections"] = total_count[0]
+
+    # Check cache
+    cache_key = f"consolidated:{stack_id}"
+    refresh = request.query_params.get("refresh", "").lower() in ("true", "1")
+    if not refresh:
+        cached = await orchestrator.cache.get(cache_key)
+        if cached:
+            logger.info("Consolidated contract CACHE HIT for %s", stack_id)
+            result_json = json.loads(cached)
+            _apply_amended_flags(result_json)
+            return result_json
+    else:
+        await orchestrator.cache.delete(cache_key)
+        logger.info("Consolidated contract CACHE INVALIDATED for %s", stack_id)
 
     # Call consolidator agent
     consolidator = orchestrator.get_agent("contract_consolidator")
@@ -421,6 +453,8 @@ async def get_consolidated_contract(stack_id: str, request: Request):
             section["conflicts"] = conflict_map.get(section.get("section_number", ""), [])
             _attach_conflicts(section.get("subsections", []))
     _attach_conflicts(result_json.get("document_structure", []))
+
+    _apply_amended_flags(result_json)
 
     # Cache for 30 days
     await orchestrator.cache.setex(cache_key, 86400 * 30, json.dumps(result_json))
