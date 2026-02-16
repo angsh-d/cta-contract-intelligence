@@ -1426,7 +1426,7 @@ function TimelineTab({ stackId }: { stackId: string }) {
 
       <div
         ref={scrollRef}
-        className="overflow-x-auto pb-8 -mx-2 px-2 scrollbar-thin"
+        className="overflow-x-auto pt-4 pb-8 -mx-2 px-2 scrollbar-thin"
         style={{ scrollbarWidth: 'thin', scrollbarColor: '#d1d1d6 transparent' }}
       >
         <div className="relative min-w-max">
