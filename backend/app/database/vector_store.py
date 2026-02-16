@@ -78,15 +78,20 @@ class VectorStore:
             task_type: RETRIEVAL_DOCUMENT for indexing, RETRIEVAL_QUERY for search.
         """
         client = self._get_genai_client()
-        result = await client.aio.models.embed_content(
-            model=self.EMBEDDING_MODEL,
-            contents=texts,
-            config=types.EmbedContentConfig(
-                task_type=task_type,
-                output_dimensionality=self.EMBEDDING_DIM,
-            ),
-        )
-        return [e.values for e in result.embeddings]
+        all_embeddings: list[list[float]] = []
+        batch_size = 100  # Gemini API limit
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i:i + batch_size]
+            result = await client.aio.models.embed_content(
+                model=self.EMBEDDING_MODEL,
+                contents=batch,
+                config=types.EmbedContentConfig(
+                    task_type=task_type,
+                    output_dimensionality=self.EMBEDDING_DIM,
+                ),
+            )
+            all_embeddings.extend(e.values for e in result.embeddings)
+        return all_embeddings
 
     @staticmethod
     def _parse_date(value) -> Optional[date]:

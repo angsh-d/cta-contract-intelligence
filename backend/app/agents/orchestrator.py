@@ -962,9 +962,12 @@ class AgentOrchestrator:
     async def _save_parsed_documents(self, stack_id, parsed_outputs):
         async with self.postgres.acquire() as conn:
             for p in parsed_outputs:
+                eff_date = p.metadata.effective_date if p.metadata else None
                 await conn.execute(
-                    "UPDATE documents SET processed = TRUE, metadata = $2 WHERE id = $1",
+                    "UPDATE documents SET processed = TRUE, metadata = $2, "
+                    "effective_date = COALESCE($3, effective_date) WHERE id = $1",
                     p.document_id, json.dumps(p.metadata.model_dump(mode="json") if p.metadata else {}),
+                    eff_date,
                 )
 
     async def _save_amendment_tracking(self, stack_id, tracking_results):

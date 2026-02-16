@@ -38,6 +38,9 @@ class AmendmentTrackerAgent(BaseAgent):
         for m in mods_raw:
             if m.get("modification_type") not in valid_mod_types:
                 m["modification_type"] = "selective_override"
+            # Ensure original_text is set for types that require it
+            if m.get("modification_type") != "addition" and not m.get("original_text"):
+                m["original_text"] = m.get("change_description", "(not provided)")
         modifications = [Modification(**m) for m in mods_raw]
 
         # Buried change scan
@@ -104,6 +107,8 @@ class AmendmentTrackerAgent(BaseAgent):
             if mod["section_number"] not in found_sections:
                 if mod.get("modification_type") not in valid_mod_types:
                     mod["modification_type"] = "selective_override"
+                if mod.get("modification_type") != "addition" and not mod.get("original_text"):
+                    mod["original_text"] = mod.get("change_description", "(not provided)")
                 try:
                     missed.append(Modification(**mod))
                 except Exception as e:

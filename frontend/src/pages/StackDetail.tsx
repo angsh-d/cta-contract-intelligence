@@ -815,6 +815,7 @@ function DocumentDetailView({
   }, [onClose])
 
   const clauses = clausesData?.clauses || []
+  const isDocx = /\.(docx?|doc)$/i.test(filename)
   const [expandedHistory, setExpandedHistory] = useState<Set<string>>(new Set())
   const [expandedConflicts, setExpandedConflicts] = useState<Set<string>>(new Set())
 
@@ -1118,55 +1119,95 @@ function DocumentDetailView({
             )}
           </AnimatePresence>
 
-          {/* Right: PDF viewer */}
+          {/* Right: Document viewer */}
           <div className="flex-1 flex flex-col bg-apple-bg/30 overflow-hidden">
-            {/* PDF toolbar */}
-            <div className="px-5 py-3 border-b border-black/[0.04] bg-white/60 backdrop-blur-sm flex items-center justify-center gap-4">
-              <button
-                onClick={() => setPageNumber(Math.max(1, pageNumber - 1))}
-                disabled={pageNumber <= 1}
-                className="p-1.5 rounded-lg hover:bg-apple-bg transition-colors duration-200 disabled:opacity-30"
-              >
-                <ChevronLeft className="w-4 h-4 text-apple-dark2" />
-              </button>
-              <span className="text-[13px] font-medium text-apple-dark2 min-w-[100px] text-center flex items-center justify-center gap-2">
-                {searchingPage && <Loader2 className="w-3.5 h-3.5 animate-spin text-apple-gray" />}
-                Page {pageNumber} {numPages ? `of ${numPages}` : ''}
-              </span>
-              <button
-                onClick={() => setPageNumber(Math.min(numPages || pageNumber, pageNumber + 1))}
-                disabled={numPages != null && pageNumber >= numPages}
-                className="p-1.5 rounded-lg hover:bg-apple-bg transition-colors duration-200 disabled:opacity-30"
-              >
-                <ChevronRight className="w-4 h-4 text-apple-dark2" />
-              </button>
-            </div>
-            {/* PDF content */}
-            <div className="flex-1 overflow-auto flex justify-center py-6 px-4">
-              <PdfDocument
-                file={pdfUrl}
-                onLoadSuccess={onDocumentLoadSuccess}
-                loading={
-                  <div className="flex items-center justify-center py-24">
-                    <Loader2 className="w-8 h-8 animate-spin text-apple-gray" />
+            {isDocx ? (
+              <>
+                {/* DOCX header */}
+                <div className="px-5 py-3 border-b border-black/[0.04] bg-white/60 backdrop-blur-sm flex items-center justify-center gap-2">
+                  <FileText className="w-4 h-4 text-apple-gray" />
+                  <span className="text-[13px] font-medium text-apple-dark2">
+                    Document Content — {clauses.length} clause{clauses.length !== 1 ? 's' : ''} extracted
+                  </span>
+                </div>
+                {/* DOCX clause content rendered as readable document */}
+                <div className="flex-1 overflow-auto py-6 px-8">
+                  <div className="max-w-[800px] mx-auto bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.1)] p-10">
+                    {clausesLoading ? (
+                      <div className="flex items-center justify-center py-24">
+                        <Loader2 className="w-8 h-8 animate-spin text-apple-gray" />
+                      </div>
+                    ) : clauses.length === 0 ? (
+                      <div className="text-center py-24">
+                        <FileText className="w-12 h-12 text-apple-light mx-auto mb-3" />
+                        <p className="text-[15px] text-apple-gray">No clauses extracted yet</p>
+                      </div>
+                    ) : (
+                      clauses.map((clause: any) => (
+                        <div key={clause.section_number} className="mb-6 last:mb-0">
+                          <h3 className="text-[14px] font-semibold text-apple-dark mb-1.5">
+                            {clause.section_number}{clause.section_title ? ` — ${clause.section_title}` : ''}
+                          </h3>
+                          <p className="text-[13px] text-apple-dark2 leading-relaxed whitespace-pre-wrap">
+                            {clause.current_text}
+                          </p>
+                        </div>
+                      ))
+                    )}
                   </div>
-                }
-                error={
-                  <div className="text-center py-24">
-                    <FileText className="w-12 h-12 text-apple-light mx-auto mb-3" />
-                    <p className="text-[15px] text-apple-gray">Failed to load PDF</p>
-                  </div>
-                }
-              >
-                <Page
-                  pageNumber={pageNumber}
-                  renderTextLayer={true}
-                  renderAnnotationLayer={true}
-                  className="shadow-[0_4px_20px_rgba(0,0,0,0.1)] rounded-lg overflow-hidden"
-                  width={Math.min(800, window.innerWidth - (showClauses ? 500 : 100))}
-                />
-              </PdfDocument>
-            </div>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* PDF toolbar */}
+                <div className="px-5 py-3 border-b border-black/[0.04] bg-white/60 backdrop-blur-sm flex items-center justify-center gap-4">
+                  <button
+                    onClick={() => setPageNumber(Math.max(1, pageNumber - 1))}
+                    disabled={pageNumber <= 1}
+                    className="p-1.5 rounded-lg hover:bg-apple-bg transition-colors duration-200 disabled:opacity-30"
+                  >
+                    <ChevronLeft className="w-4 h-4 text-apple-dark2" />
+                  </button>
+                  <span className="text-[13px] font-medium text-apple-dark2 min-w-[100px] text-center flex items-center justify-center gap-2">
+                    {searchingPage && <Loader2 className="w-3.5 h-3.5 animate-spin text-apple-gray" />}
+                    Page {pageNumber} {numPages ? `of ${numPages}` : ''}
+                  </span>
+                  <button
+                    onClick={() => setPageNumber(Math.min(numPages || pageNumber, pageNumber + 1))}
+                    disabled={numPages != null && pageNumber >= numPages}
+                    className="p-1.5 rounded-lg hover:bg-apple-bg transition-colors duration-200 disabled:opacity-30"
+                  >
+                    <ChevronRight className="w-4 h-4 text-apple-dark2" />
+                  </button>
+                </div>
+                {/* PDF content */}
+                <div className="flex-1 overflow-auto flex justify-center py-6 px-4">
+                  <PdfDocument
+                    file={pdfUrl}
+                    onLoadSuccess={onDocumentLoadSuccess}
+                    loading={
+                      <div className="flex items-center justify-center py-24">
+                        <Loader2 className="w-8 h-8 animate-spin text-apple-gray" />
+                      </div>
+                    }
+                    error={
+                      <div className="text-center py-24">
+                        <FileText className="w-12 h-12 text-apple-light mx-auto mb-3" />
+                        <p className="text-[15px] text-apple-gray">Failed to load PDF</p>
+                      </div>
+                    }
+                  >
+                    <Page
+                      pageNumber={pageNumber}
+                      renderTextLayer={true}
+                      renderAnnotationLayer={true}
+                      className="shadow-[0_4px_20px_rgba(0,0,0,0.1)] rounded-lg overflow-hidden"
+                      width={Math.min(800, window.innerWidth - (showClauses ? 500 : 100))}
+                    />
+                  </PdfDocument>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </motion.div>

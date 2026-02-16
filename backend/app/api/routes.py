@@ -717,7 +717,7 @@ async def get_document_clauses(stack_id: str, document_id: str, request: Request
 
 @router.get("/contract-stacks/{stack_id}/documents/{document_id}/pdf")
 async def get_document_pdf(stack_id: str, document_id: str, request: Request):
-    """Serve the original PDF file for a document."""
+    """Serve the original document file (PDF or DOCX)."""
     pool = request.app.state.postgres_pool
     stack_uuid = _parse_uuid(stack_id, "stack_id")
     doc_uuid = _parse_uuid(document_id, "document_id")
@@ -731,9 +731,16 @@ async def get_document_pdf(stack_id: str, document_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Document not found")
     file_path = Path(row["file_path"])
     if not file_path.exists():
-        raise HTTPException(status_code=404, detail="PDF file not found on disk")
+        raise HTTPException(status_code=404, detail="Document file not found on disk")
+    ext = file_path.suffix.lower()
+    mime_types = {
+        ".pdf": "application/pdf",
+        ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ".doc": "application/msword",
+    }
+    media_type = mime_types.get(ext, "application/octet-stream")
     return FileResponse(
         path=str(file_path),
-        media_type="application/pdf",
+        media_type=media_type,
         filename=row["filename"],
     )
