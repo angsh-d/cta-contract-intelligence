@@ -2455,9 +2455,8 @@ function ConsolidateTab({ stackId }: { stackId: string }) {
     for (const { section, depth } of flat) {
       const isAmended = section.is_amended
       const headingLevel = section.level === 1 ? 'h2' : section.level === 2 ? 'h3' : 'h4'
-      const amendedLabel = isAmended ? ' <strong>AMENDED</strong>' : ''
 
-      html += `<${headingLevel}>${section.section_number}. ${section.section_title}${amendedLabel}</${headingLevel}>`
+      html += `<${headingLevel}>${section.section_number}. ${section.section_title}</${headingLevel}>`
 
       if (section.content) {
         const escaped = section.content.replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -2465,20 +2464,6 @@ function ConsolidateTab({ stackId }: { stackId: string }) {
           html += `<p><mark>${escaped}</mark></p>`
         } else {
           html += `<p>${escaped}</p>`
-        }
-      }
-
-      if (isAmended && section.amendment_source) {
-        let annotation = `Modified by ${section.amendment_source}`
-        if (section.amendment_description) {
-          annotation += ` — ${section.amendment_description}`
-        }
-        html += `<p><em>${annotation}</em></p>`
-      }
-
-      if (section.conflicts?.length) {
-        for (const c of section.conflicts) {
-          html += `<blockquote><strong>${c.severity}</strong>: ${c.description}</blockquote>`
         }
       }
     }
