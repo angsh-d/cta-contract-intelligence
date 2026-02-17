@@ -23,8 +23,8 @@ Return JSON:
     {{
       "section_number": "7.2",
       "modification_type": "selective_override",
-      "original_text": "...Net 30...",
-      "new_text": "...Net 45...",
+      "original_text": "The actual clause body text ONLY — no section headers, no amendment instructions — start with the clause content itself",
+      "new_text": "The actual replacement clause body text ONLY — no 'Section X is deleted and replaced with...' framing — just the new clause content",
       "change_description": "Payment terms changed from Net 30 to Net 45"
     }}
   ],

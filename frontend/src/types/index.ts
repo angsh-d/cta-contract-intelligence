@@ -155,6 +155,7 @@ export interface ConsolidatedSection {
   is_amended: boolean;
   amendment_source: string | null;
   amendment_description: string | null;
+  source_document_id: string | null;
   subsections: ConsolidatedSection[];
   conflicts?: Array<{
     conflict_id: string;

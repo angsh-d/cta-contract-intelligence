@@ -547,6 +547,7 @@ class ConsolidatedSection(BaseModel):
     is_amended: bool = False
     amendment_source: Optional[str] = None
     amendment_description: Optional[str] = None
+    source_document_id: Optional[str] = None
     subsections: list["ConsolidatedSection"] = Field(default_factory=list)
 
 

@@ -578,6 +578,8 @@ class AgentOrchestrator:
                 raise PipelineError("Override resolution failed for ALL sections", stage="override_resolution")
 
             await self._save_resolved_clauses(contract_stack_id, resolved_clauses)
+            # Invalidate consolidated cache so stale text isn't served
+            await self.cache.delete(f"consolidated:{contract_stack_id}")
             current_clauses = [
                 CurrentClause(
                     section_number=r.clause_version.section_number,
@@ -815,18 +817,15 @@ class AgentOrchestrator:
                         text=mod.new_text or "",
                         clause_category="general",
                     )
+                    # Original clause already has the text — don't also list the same
+                    # amendment as a modification or ADDITION will double the text.
                     inputs.append(OverrideResolutionInput(
                         contract_stack_id=contract_stack_id,
                         section_number=mod.section_number,
                         original_clause=new_section,
                         original_document_id=track.amendment_document_id,
                         original_document_label=f"Amendment {track.amendment_number}",
-                        amendments=[AmendmentForSection(
-                            amendment_document_id=track.amendment_document_id,
-                            amendment_number=track.amendment_number,
-                            effective_date=track.effective_date,
-                            modification=mod,
-                        )],
+                        amendments=[],
                     ))
 
         logger.info("Built %d override resolution inputs (%d from CTA, %d new from amendments)",
@@ -965,9 +964,10 @@ class AgentOrchestrator:
                 eff_date = p.metadata.effective_date if p.metadata else None
                 await conn.execute(
                     "UPDATE documents SET processed = TRUE, metadata = $2, "
-                    "effective_date = COALESCE($3, effective_date) WHERE id = $1",
+                    "effective_date = COALESCE($3, effective_date), "
+                    "raw_text = $4 WHERE id = $1",
                     p.document_id, json.dumps(p.metadata.model_dump(mode="json") if p.metadata else {}),
-                    eff_date,
+                    eff_date, p.raw_text or None,
                 )
 
     async def _save_amendment_tracking(self, stack_id, tracking_results):

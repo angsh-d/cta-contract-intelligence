@@ -1,0 +1,18 @@
+Verify the programmatic assembly of Section {section_number}.
+
+ASSEMBLED TEXT (produced by code — do NOT rewrite this):
+{assembled_text}
+
+ORIGINAL TEXT (from original CTA):
+{original_text}
+
+AMENDMENT CHAIN (applied in order):
+{amendment_chain}
+
+Classify this clause and verify the assembly. Return ONLY valid JSON:
+{{
+  "reasoning": "your step-by-step verification of how each amendment was applied...",
+  "clause_category": "payment|insurance|indemnification|data_retention|confidentiality|termination|intellectual_property|publication|regulatory|study_conduct|budget|personnel|general",
+  "confidence": 0.95,
+  "confidence_factors": {{"amendment_clarity": 0.9, "section_match": 0.8, "assembly_quality": 0.95}}
+}}

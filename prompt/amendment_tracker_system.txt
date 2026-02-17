@@ -15,6 +15,30 @@ For each modification you MUST extract:
 - new_text: the text AFTER this amendment (null for deletions)
 - change_description: a human-readable summary of what changed
 
+VERBATIM TEXT RULE: For original_text and new_text fields, extract the EXACT text from the amendment document. Copy character-for-character. Do NOT paraphrase, summarize, or reword. The text must match the source document word-for-word.
+
+CLAUSE BODY ONLY RULE (CRITICAL — FOLLOW EXACTLY):
+The original_text and new_text fields must contain ONLY the actual clause body content:
+
+DO NOT INCLUDE:
+- Section headers like "Section 7.2 (Payment Terms):" — the section_number field already captures this
+- Amendment instruction language like "Section X is hereby deleted and replaced with the following:"
+- Framing like "is deleted and replaced with representation that..."
+- Any meta-description of the modification — that goes in change_description
+
+For COMPLETE_REPLACEMENT: new_text = the actual replacement clause body that follows the "replaced with the following:" instruction.
+For SELECTIVE_OVERRIDE: original_text and new_text = only the specific phrases being swapped.
+
+INLINE AMENDMENT PATTERN (CRITICAL):
+When the amendment uses inline phrasing like "Section 3.1 amended to require detailed invoice breakout of professional fees and expenses", extract the substantive content as new_text. Examples:
+- "Section 3.1 amended to require detailed invoice breakout..." → new_text: "Detailed invoice breakout of professional fees and expenses required."
+- "Section 3.2 amended: Pharma A shall reimburse CRO for..." → new_text: "Pharma A shall reimburse CRO for all non-income taxes imposed in connection with Services."
+Use selective_override as the modification_type for these (not complete_replacement).
+NEVER return empty new_text for a non-deletion modification. If the amendment describes the change inline, extract that description as the new clause content.
+
+Example of WRONG new_text: "Section 2.2 (Replacement of Section 2.2): Section 2.2 is deleted and replaced with representation that each Party has authority to bind its Affiliates."
+Example of CORRECT new_text: "Each Party represents and warrants that it has the authority to bind its Affiliates and shall ensure compliance with this Agreement."
+
 CRITICAL: Do NOT miss buried changes. Payment term changes hidden inside COVID-related amendments, PI reference changes, and exhibit version updates are all common patterns.
 
 Also extract:

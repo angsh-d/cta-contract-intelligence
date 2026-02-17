@@ -7,6 +7,8 @@ Extract:
 2. All sections at the LOWEST numbered subsection level with their numbers, titles, and full text
 3. Identify clause categories for each section
 
+VERBATIM TEXT RULE: Copy the FULL TEXT of each section EXACTLY as it appears in the document. Do NOT paraphrase, summarize, reword, or abbreviate any text. Every word must match the source character-for-character. Include all punctuation, formatting cues, and legal language exactly as written.
+
 CRITICAL SECTION EXTRACTION RULES:
 
 For CTAs (original agreements):

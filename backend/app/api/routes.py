@@ -413,6 +413,19 @@ async def get_consolidated_contract(stack_id: str, request: Request):
             result_json["metadata"]["amended_sections"] = amended_count[0]
             result_json["metadata"]["total_sections"] = total_count[0]
 
+    # Build clause lookup for source_document_id attachment
+    clause_source_map: dict[str, str | None] = {
+        c["section_number"]: c.get("source_document_id") for c in clauses
+    }
+
+    def _attach_source_document_ids(sections: list[dict]) -> None:
+        """Ensure every section has source_document_id from clauses lookup."""
+        for section in sections:
+            sn = section.get("section_number", "")
+            if not section.get("source_document_id") and sn in clause_source_map:
+                section["source_document_id"] = clause_source_map[sn]
+            _attach_source_document_ids(section.get("subsections", []))
+
     # Check cache
     cache_key = f"consolidated:{stack_id}"
     refresh = request.query_params.get("refresh", "").lower() in ("true", "1")
@@ -422,6 +435,7 @@ async def get_consolidated_contract(stack_id: str, request: Request):
             logger.info("Consolidated contract CACHE HIT for %s", stack_id)
             result_json = json.loads(cached)
             _apply_amended_flags(result_json)
+            _attach_source_document_ids(result_json.get("document_structure", []))
             return result_json
     else:
         await orchestrator.cache.delete(cache_key)
@@ -455,6 +469,7 @@ async def get_consolidated_contract(stack_id: str, request: Request):
     _attach_conflicts(result_json.get("document_structure", []))
 
     _apply_amended_flags(result_json)
+    _attach_source_document_ids(result_json.get("document_structure", []))
 
     # Cache for 30 days
     await orchestrator.cache.setex(cache_key, 86400 * 30, json.dumps(result_json))
@@ -777,4 +792,5 @@ async def get_document_pdf(stack_id: str, document_id: str, request: Request):
         path=str(file_path),
         media_type=media_type,
         filename=row["filename"],
+        content_disposition_type="inline",
     )

@@ -152,6 +152,7 @@ class ContractConsolidatorAgent(BaseAgent):
             is_amended=is_amended,
             amendment_source=amendment_source,
             amendment_description=amendment_description,
+            source_document_id=clause_data.get("source_document_id"),
             subsections=subsections,
         )
 
@@ -178,6 +179,7 @@ class ContractConsolidatorAgent(BaseAgent):
             is_amended=is_amended,
             amendment_source=amendment_source,
             amendment_description=amendment_description,
+            source_document_id=clause_data.get("source_document_id"),
         )
 
     def _collect_section_numbers(self, sections: list[ConsolidatedSection], out: set[str]) -> None:

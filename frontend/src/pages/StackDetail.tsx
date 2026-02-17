@@ -89,8 +89,7 @@ import StarterKit from '@tiptap/starter-kit'
 import TextAlign from '@tiptap/extension-text-align'
 import TiptapSubscript from '@tiptap/extension-subscript'
 import TiptapSuperscript from '@tiptap/extension-superscript'
-import TiptapHighlight from '@tiptap/extension-highlight'
-import { Node as TiptapNode } from '@tiptap/core'
+import { Mark as TiptapMark, Node as TiptapNode, mergeAttributes } from '@tiptap/core'
 import { Document as DocxDocument, Packer, Paragraph, TextRun, HeadingLevel } from 'docx'
 import { saveAs } from 'file-saver'
 import jsPDF from 'jspdf'
@@ -114,6 +113,37 @@ const PageBreakNode = TiptapNode.create({
     }]
   },
 })
+
+/**
+ * Custom TipTap highlight mark that preserves data attributes on <mark> elements.
+ * The default TiptapHighlight extension strips custom data-* attributes during parsing,
+ * so we define our own mark to keep provenance metadata (section number, source document, etc.).
+ */
+const AmendmentHighlight = TiptapMark.create({
+  name: 'highlight',
+
+  addOptions() {
+    return { HTMLAttributes: {} }
+  },
+
+  parseHTML() {
+    return [{ tag: 'mark' }]
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ['mark', mergeAttributes(this.options.HTMLAttributes, HTMLAttributes), 0]
+  },
+
+  addAttributes() {
+    return {
+      'data-section-number': { default: null, parseHTML: el => el.getAttribute('data-section-number') },
+      'data-source-document-id': { default: null, parseHTML: el => el.getAttribute('data-source-document-id') },
+      'data-amendment-source': { default: null, parseHTML: el => el.getAttribute('data-amendment-source') },
+      'data-amendment-description': { default: null, parseHTML: el => el.getAttribute('data-amendment-description') },
+    }
+  },
+})
+
 import { api } from '../api/client'
 import type { Conflict, QueryResponse, TimelineEntry, DocumentClause, SourceChainLink, ClauseConflict, ConsolidatedSection } from '../types'
 
@@ -2396,7 +2426,7 @@ function WordHomeRibbon({ editor }: { editor: ReturnType<typeof useEditor> }) {
             <RibbonBtn icon={Subscript} label="Subscript" active={editor.isActive('subscript')} onClick={() => editor.chain().focus().toggleSubscript().run()} />
             <RibbonBtn icon={Superscript} label="Superscript" active={editor.isActive('superscript')} onClick={() => editor.chain().focus().toggleSuperscript().run()} />
             <div className="w-px h-[16px] bg-[#d4d4d4] mx-[2px]" />
-            <RibbonBtn icon={Highlighter} label="Text Highlight Color" active={editor.isActive('highlight')} onClick={() => editor.chain().focus().toggleHighlight().run()} />
+            <RibbonBtn icon={Highlighter} label="Text Highlight Color" active={editor.isActive('highlight')} onClick={() => editor.chain().focus().toggleMark('highlight').run()} />
             <RibbonBtn icon={Type} label="Font Color" onClick={() => {}} />
           </div>
         </div>
@@ -2452,7 +2482,7 @@ function ConsolidateTab({ stackId }: { stackId: string }) {
   const buildDocumentHtml = (sections: ConsolidatedSection[]): string => {
     const flat = flattenSections(sections)
     let html = ''
-    for (const { section, depth } of flat) {
+    for (const { section } of flat) {
       const isAmended = section.is_amended
       const headingLevel = section.level === 1 ? 'h2' : section.level === 2 ? 'h3' : 'h4'
 
@@ -2461,7 +2491,13 @@ function ConsolidateTab({ stackId }: { stackId: string }) {
       if (section.content) {
         const escaped = section.content.replace(/</g, '&lt;').replace(/>/g, '&gt;')
         if (isAmended) {
-          html += `<p><mark>${escaped}</mark></p>`
+          const attrs = [
+            `data-section-number="${section.section_number}"`,
+            section.source_document_id ? `data-source-document-id="${section.source_document_id}"` : '',
+            section.amendment_source ? `data-amendment-source="${section.amendment_source.replace(/"/g, '&quot;')}"` : '',
+            section.amendment_description ? `data-amendment-description="${section.amendment_description.replace(/"/g, '&quot;')}"` : '',
+          ].filter(Boolean).join(' ')
+          html += `<p><mark ${attrs}>${escaped}</mark></p>`
         } else {
           html += `<p>${escaped}</p>`
         }
@@ -2641,7 +2677,7 @@ function ConsolidateTab({ stackId }: { stackId: string }) {
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
       TiptapSubscript,
       TiptapSuperscript,
-      TiptapHighlight.configure({ multicolor: false }),
+      AmendmentHighlight,
       PageBreakNode,
     ],
     content: docHtml,
@@ -2724,6 +2760,35 @@ function ConsolidateTab({ stackId }: { stackId: string }) {
     canvas.addEventListener('scroll', handleScroll, { passive: true })
     return () => canvas.removeEventListener('scroll', handleScroll)
   }, [pageCount])
+
+  // ── Provenance panel state ──
+  const [provenancePanel, setProvenancePanel] = useState<{
+    sectionNumber: string
+    sourceDocumentId: string
+    amendmentSource: string
+    amendmentDescription: string
+  } | null>(null)
+
+  // Click handler for amended <mark> elements via event delegation
+  useEffect(() => {
+    const container = editorContainerRef.current
+    if (!container) return
+    const handleClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      const mark = target.closest('mark') as HTMLElement | null
+      if (!mark) return
+      const sourceDocId = mark.getAttribute('data-source-document-id')
+      if (!sourceDocId) return
+      setProvenancePanel({
+        sectionNumber: mark.getAttribute('data-section-number') || '',
+        sourceDocumentId: sourceDocId,
+        amendmentSource: mark.getAttribute('data-amendment-source') || '',
+        amendmentDescription: mark.getAttribute('data-amendment-description') || '',
+      })
+    }
+    container.addEventListener('click', handleClick)
+    return () => container.removeEventListener('click', handleClick)
+  }, [editor])
 
   if (isLoading) {
     return (
@@ -2910,21 +2975,77 @@ function ConsolidateTab({ stackId }: { stackId: string }) {
         </div>
       </div>
 
-      {/* ── Document canvas with visual pages ── */}
-      <div
-        ref={canvasRef}
-        className="flex-1 overflow-auto"
-        style={{ background: '#a0a0a0', minHeight: '600px', maxHeight: 'calc(100vh - 320px)' }}
-      >
-        <div className="flex flex-col items-center py-4">
-          <div
-            ref={editorContainerRef}
-            className="word-pages-container flex-shrink-0"
-            style={{ width: '816px' }}
-          >
-            <EditorContent editor={editor} />
+      {/* ── Document canvas with visual pages + provenance panel ── */}
+      <div className="flex-1 flex relative overflow-hidden" style={{ minHeight: '600px', maxHeight: 'calc(100vh - 320px)' }}>
+        <div
+          ref={canvasRef}
+          className="flex-1 overflow-auto"
+          style={{
+            background: '#a0a0a0',
+            marginRight: provenancePanel ? '480px' : '0px',
+            transition: 'margin-right 0.3s ease',
+          }}
+        >
+          <div className="flex flex-col items-center py-4">
+            <div
+              ref={editorContainerRef}
+              className="word-pages-container flex-shrink-0"
+              style={{ width: '816px' }}
+            >
+              <EditorContent editor={editor} />
+            </div>
           </div>
         </div>
+
+        {/* ── Amendment Provenance Panel ── */}
+        <AnimatePresence>
+          {provenancePanel && (
+            <motion.div
+              initial={{ x: 480 }}
+              animate={{ x: 0 }}
+              exit={{ x: 480 }}
+              transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+              className="absolute top-0 right-0 bottom-0 bg-white border-l border-[#d4d4d4] flex flex-col shadow-xl z-20"
+              style={{ width: '480px' }}
+            >
+              {/* Panel header */}
+              <div className="flex items-center gap-3 px-4 py-3 border-b border-[#e0e0e0]" style={{ background: '#f5f5f5' }}>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[13px] font-semibold text-[#333] truncate" style={{ fontFamily: 'Segoe UI, sans-serif' }}>
+                    {provenancePanel.amendmentSource || 'Source Amendment'}
+                  </div>
+                  <div className="text-[11px] text-[#888] mt-0.5">
+                    Section {provenancePanel.sectionNumber}
+                  </div>
+                </div>
+                <button
+                  onClick={() => setProvenancePanel(null)}
+                  className="w-7 h-7 flex items-center justify-center rounded hover:bg-[#e0e0e0] transition-colors"
+                >
+                  <X className="w-4 h-4 text-[#666]" />
+                </button>
+              </div>
+
+              {/* Amendment description */}
+              {provenancePanel.amendmentDescription && (
+                <div className="px-4 py-2.5 border-b border-[#e8e8e8]" style={{ background: '#fefce8' }}>
+                  <div className="text-[11px] text-[#92700c] leading-relaxed" style={{ fontFamily: 'Segoe UI, sans-serif' }}>
+                    {provenancePanel.amendmentDescription}
+                  </div>
+                </div>
+              )}
+
+              {/* PDF iframe */}
+              <div className="flex-1 bg-[#525659]">
+                <iframe
+                  src={api.getDocumentPdfUrl(stackId, provenancePanel.sourceDocumentId)}
+                  className="w-full h-full border-0"
+                  title={`Source: ${provenancePanel.amendmentSource}`}
+                />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* ── Status bar (Word blue) ───── */}
