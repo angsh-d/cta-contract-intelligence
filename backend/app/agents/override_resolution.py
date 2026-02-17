@@ -105,7 +105,8 @@ class OverrideResolutionAgent(BaseAgent):
             mod = amendment.modification
             mod_type = mod.modification_type
             stage_label = f"amendment_{amendment.amendment_number}"
-            doc_label = f"Amendment {amendment.amendment_number} (Effective {amendment.effective_date})"
+            eff = amendment.effective_date
+            doc_label = f"Amendment {amendment.amendment_number}" + (f" (Effective {eff})" if eff else "")
 
             new_text, warning = self._apply_modification(
                 current_text, mod_type, mod.original_text, mod.new_text,

@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 
 from app.api.websocket import broadcast_progress, cleanup_job
@@ -592,10 +592,14 @@ async def get_timeline(stack_id: str, request: Request):
     pool = request.app.state.postgres_pool
     stack_uuid = _parse_uuid(stack_id, "stack_id")
     async with pool.acquire() as conn:
-        # Get document timeline
+        # Get document timeline — join with amendments to get amendment_number for ordering
         docs = await conn.fetch(
-            "SELECT d.id, d.document_type, d.filename, d.effective_date, d.document_version "
-            "FROM documents d WHERE d.contract_stack_id = $1 ORDER BY d.effective_date NULLS LAST",
+            "SELECT d.id, d.document_type, d.filename, d.effective_date, "
+            "d.document_version, a.amendment_number "
+            "FROM documents d "
+            "LEFT JOIN amendments a ON a.document_id = d.id AND a.contract_stack_id = d.contract_stack_id "
+            "WHERE d.contract_stack_id = $1 "
+            "ORDER BY (d.document_type = 'cta') DESC, a.amendment_number NULLS LAST, d.effective_date NULLS LAST",
             stack_uuid,
         )
         # Get supersession relationships
@@ -613,6 +617,7 @@ async def get_timeline(stack_id: str, request: Request):
                 "filename": d["filename"],
                 "effective_date": str(d["effective_date"]) if d["effective_date"] else None,
                 "document_version": d["document_version"],
+                "amendment_number": d["amendment_number"],
             }
             for d in docs
         ],
@@ -766,7 +771,7 @@ async def get_document_clauses(stack_id: str, document_id: str, request: Request
 
 @router.get("/contract-stacks/{stack_id}/documents/{document_id}/pdf")
 async def get_document_pdf(stack_id: str, document_id: str, request: Request):
-    """Serve the original document file (PDF or DOCX)."""
+    """Serve the original document file — PDFs inline, DOCX converted to HTML."""
     pool = request.app.state.postgres_pool
     stack_uuid = _parse_uuid(stack_id, "stack_id")
     doc_uuid = _parse_uuid(document_id, "document_id")
@@ -782,15 +787,32 @@ async def get_document_pdf(stack_id: str, document_id: str, request: Request):
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Document file not found on disk")
     ext = file_path.suffix.lower()
-    mime_types = {
-        ".pdf": "application/pdf",
-        ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        ".doc": "application/msword",
-    }
-    media_type = mime_types.get(ext, "application/octet-stream")
+
+    # DOCX: convert to styled HTML so it renders in an iframe
+    if ext == ".docx":
+        import mammoth
+        with open(file_path, "rb") as f:
+            result = mammoth.convert_to_html(f)
+        html = (
+            "<!DOCTYPE html><html><head><meta charset='utf-8'>"
+            "<style>"
+            "body { font-family: 'Calibri', 'Segoe UI', sans-serif; font-size: 11pt; "
+            "line-height: 1.6; color: #222; max-width: 720px; margin: 24px auto; padding: 0 20px; }"
+            "p { margin: 0 0 8px 0; }"
+            "h1,h2,h3,h4 { margin: 18px 0 8px; color: #111; }"
+            "table { border-collapse: collapse; width: 100%; margin: 12px 0; }"
+            "td,th { border: 1px solid #ccc; padding: 6px 10px; text-align: left; font-size: 10pt; }"
+            "th { background: #f0f0f0; font-weight: 600; }"
+            "</style></head><body>"
+            f"{result.value}"
+            "</body></html>"
+        )
+        return HTMLResponse(content=html)
+
+    # PDF: serve directly (browser renders natively)
     return FileResponse(
         path=str(file_path),
-        media_type=media_type,
+        media_type="application/pdf",
         filename=row["filename"],
         content_disposition_type="inline",
     )

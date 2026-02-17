@@ -29,6 +29,7 @@ export interface TimelineEntry {
   filename: string;
   effective_date: string | null;
   document_version: string | null;
+  amendment_number: number | null;
 }
 
 export interface Supersession {

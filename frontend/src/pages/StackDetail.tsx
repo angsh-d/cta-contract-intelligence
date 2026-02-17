@@ -1466,7 +1466,7 @@ function TimelineTab({ stackId }: { stackId: string }) {
               const isLast = i === timeline.length - 1
               const docLabel = isRoot
                 ? 'MSA'
-                : `Amd ${entry.filename.match(/\d+/)?.[0] || (i)}`
+                : `Amd ${entry.amendment_number ?? entry.filename.match(/\d+/)?.[0] ?? i}`
 
               return (
                 <motion.div
@@ -3012,7 +3012,7 @@ function ConsolidateTab({ stackId }: { stackId: string }) {
               <div className="flex items-center gap-3 px-4 py-3 border-b border-[#e0e0e0]" style={{ background: '#f5f5f5' }}>
                 <div className="flex-1 min-w-0">
                   <div className="text-[13px] font-semibold text-[#333] truncate" style={{ fontFamily: 'Segoe UI, sans-serif' }}>
-                    {provenancePanel.amendmentSource || 'Source Amendment'}
+                    {(provenancePanel.amendmentSource || 'Source Amendment').replace(/\s*\(Effective\s+None\)/i, '')}
                   </div>
                   <div className="text-[11px] text-[#888] mt-0.5">
                     Section {provenancePanel.sectionNumber}
@@ -3026,16 +3026,7 @@ function ConsolidateTab({ stackId }: { stackId: string }) {
                 </button>
               </div>
 
-              {/* Amendment description */}
-              {provenancePanel.amendmentDescription && (
-                <div className="px-4 py-2.5 border-b border-[#e8e8e8]" style={{ background: '#fefce8' }}>
-                  <div className="text-[11px] text-[#92700c] leading-relaxed" style={{ fontFamily: 'Segoe UI, sans-serif' }}>
-                    {provenancePanel.amendmentDescription}
-                  </div>
-                </div>
-              )}
-
-              {/* PDF iframe */}
+              {/* Document viewer */}
               <div className="flex-1 bg-[#525659]">
                 <iframe
                   src={api.getDocumentPdfUrl(stackId, provenancePanel.sourceDocumentId)}
